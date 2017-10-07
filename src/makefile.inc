@@ -10,5 +10,5 @@ LD_LIBRARY_PATH = LD_LIBRARY_PATH=$(CODEROOT)/boost/lib
 # -I means find header
 # -L means find built sources dir
 # -l means library of built source
-CPPFLAGS = -Wall -I$(CODEROOT) -I$(CODEROOT)/boost/include -g -std=c++11 -L$(CODEROOT)/boost/lib -lboost_filesystem -lboost_system
+CPPFLAGS = -Wall -I$(CODEROOT) -g -std=c++11
 

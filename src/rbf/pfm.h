@@ -6,6 +6,8 @@ typedef int RC;
 typedef char byte;
 
 #define PAGE_SIZE 4096
+#include <stdio.h>
+#include <cstring>
 #include <string>
 #include <climits>
 #include <iostream>
@@ -15,7 +17,6 @@ typedef char byte;
 #include <memory>
 #include <utility> //std::pair
 #include <unordered_map>
-#include <boost/filesystem.hpp>
 
 using namespace std;
 
@@ -65,4 +66,5 @@ public:
 }; 
 
 string addressToString(FileHandle& fh);
+bool isFileExist(const string &fileName);
 #endif

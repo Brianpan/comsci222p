@@ -13,28 +13,27 @@ PagedFileManager* PagedFileManager::instance()
 
 PagedFileManager::PagedFileManager()
 {
-	if( !boost::filesystem::exists(_folder_name) )
-	{
-		boost::filesystem::path path (_folder_name);
-		boost::filesystem::create_directory(path);
-	}
-
+//	if( !boost::filesystem::exists(_folder_name) )
+//	{
+//		boost::filesystem::path path (_folder_name);
+//		boost::filesystem::create_directory(path);
+//	}
 }
 
 
 PagedFileManager::~PagedFileManager()
 {
-	if( !boost::filesystem::exists(_folder_name) )
-	{
-
-		boost::filesystem::remove(_folder_name);
-	}
+//	if( !boost::filesystem::exists(_folder_name) )
+//	{
+//
+//		boost::filesystem::remove(_folder_name);
+//	}
 }
 
 
 RC PagedFileManager::createFile(const string &fileName)
 {
-	if( boost::filesystem::exists(fileName) )
+	if( isFileExist(fileName) )
     {
     	cout<<"File already existed !"<<endl;
 		return -1;
@@ -56,13 +55,13 @@ RC PagedFileManager::createFile(const string &fileName)
 RC PagedFileManager::destroyFile(const string &fileName)
 {
 
-	if( !boost::filesystem::exists(fileName) )
+	if( !isFileExist(fileName) )
     {
     	cout<<"File not existed !"<<endl;
 		return -1;
     }
 
-    boost::filesystem::remove(fileName);
+    remove( fileName.c_str() );
 
     return 0;
 }
@@ -77,7 +76,7 @@ RC PagedFileManager::openFile(const string &fileName, FileHandle &fileHandle)
 		return -1;
 	}
 
-	if( !boost::filesystem::exists(fileName) )
+	if( !isFileExist(fileName) )
 	{
 	    	cout<<"File not existed !"<<endl;
 			return -1;
@@ -265,4 +264,10 @@ string addressToString(FileHandle& fh){
 	ostringstream buffer;
 	buffer << &fh;
 	return buffer.str();
+}
+
+bool isFileExist(const string &fileName)
+{
+	ifstream infile(fileName);
+	return infile.good();
 }

@@ -26,31 +26,18 @@ rbftest12.o: pfm.h rbfm.h
 
 # binary dependencies
 rbftest1: rbftest1.o librbf.a $(CODEROOT)/rbf/librbf.a
-	$(LD_LIBRARY_PATH) $(CC) $^ -o $@ $(CPPFLAGS)
 rbftest2: rbftest2.o librbf.a $(CODEROOT)/rbf/librbf.a
-	$(LD_LIBRARY_PATH) $(CC) $^ -o $@ $(CPPFLAGS)
 rbftest3: rbftest3.o librbf.a $(CODEROOT)/rbf/librbf.a
-	$(LD_LIBRARY_PATH) $(CC) $^ -o $@ $(CPPFLAGS)
 rbftest4: rbftest4.o librbf.a $(CODEROOT)/rbf/librbf.a
-	$(LD_LIBRARY_PATH) $(CC) $^ -o $@ $(CPPFLAGS)
 rbftest5: rbftest5.o librbf.a $(CODEROOT)/rbf/librbf.a
-	$(LD_LIBRARY_PATH) $(CC) $^ -o $@ $(CPPFLAGS)
 rbftest6: rbftest6.o librbf.a $(CODEROOT)/rbf/librbf.a
-	$(LD_LIBRARY_PATH) $(CC) $^ -o $@ $(CPPFLAGS)
 rbftest7: rbftest7.o librbf.a $(CODEROOT)/rbf/librbf.a
-	$(LD_LIBRARY_PATH) $(CC) $^ -o $@ $(CPPFLAGS)
 rbftest8: rbftest8.o librbf.a $(CODEROOT)/rbf/librbf.a
-	$(LD_LIBRARY_PATH) $(CC) $^ -o $@ $(CPPFLAGS)
 rbftest8b: rbftest8b.o librbf.a $(CODEROOT)/rbf/librbf.a
-	$(LD_LIBRARY_PATH) $(CC) $^ -o $@ $(CPPFLAGS)
 rbftest9: rbftest9.o librbf.a $(CODEROOT)/rbf/librbf.a
-	$(LD_LIBRARY_PATH) $(CC) $^ -o $@ $(CPPFLAGS)
 rbftest10: rbftest10.o librbf.a $(CODEROOT)/rbf/librbf.a
-	$(LD_LIBRARY_PATH) $(CC) $^ -o $@ $(CPPFLAGS)
 rbftest11: rbftest11.o librbf.a $(CODEROOT)/rbf/librbf.a
-	$(LD_LIBRARY_PATH) $(CC) $^ -o $@ $(CPPFLAGS)
 rbftest12: rbftest12.o librbf.a $(CODEROOT)/rbf/librbf.a
-	$(LD_LIBRARY_PATH) $(CC) $^ -o $@ $(CPPFLAGS)
 # dependencies to compile used libraries
 .PHONY: $(CODEROOT)/rbf/librbf.a
 $(CODEROOT)/rbf/librbf.a:
