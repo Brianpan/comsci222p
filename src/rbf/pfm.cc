@@ -214,30 +214,23 @@ void FileHandle::fetchFileData()
 	if(end_pos >= PAGE_SIZE)
 	{
 		_handler->seekg(0,  ios_base::beg);
-		//notive the brackets
-		while( p<4 && (*_handler)>>counter[p] )
-		{
-			p++;
-		}
+		void* firstPage = malloc(PAGE_SIZE);
+		_handler->read( (char*) firstPage, PAGE_SIZE );
+
+		memcpy( (void*)counter, firstPage, sizeof(unsigned)*4 );
+		// free memory
+		free(firstPage);
 	}
 	// init the hidden page
 	if(p != 4 )
 	{
 		_handler->seekg(0, ios_base::beg);
+		memset( counter, 0, sizeof(unsigned)*4 );
 
-		memset(counter, 0, sizeof(unsigned)*4);
-		string init = "0 0 0 0#";
-		unsigned init_size = sizeof(init.c_str());
-		_handler->write( (char *)init.c_str(), init_size );
+		void* blankPage = malloc(PAGE_SIZE);
+		memcpy( (void*)counter, blankPage, sizeof(unsigned)*4 );
 
-		// write the rest of #
-		int rest_of_bytes = PAGE_SIZE - init_size;
-		char rest_chars[rest_of_bytes];
-		for(int i=0;i < rest_of_bytes;i++)
-		{
-			rest_chars[i] = '#';
-		}
-		_handler->write(rest_chars, rest_of_bytes);
+		_handler->write( (char*) blankPage, PAGE_SIZE );
 	}
 
 	pageCounter = counter[0];
@@ -258,20 +251,13 @@ void FileHandle::saveCounter()
 	_handler->clear();
 	_handler->seekg(0, ios_base::beg);
 
-	// save those counters to the file
-	string record_counters = to_string(pageCounter) + " " + to_string(readPageCounter)+ " " + to_string(writePageCounter) +" "+ to_string(appendPageCounter)+"#";
+	unsigned counter[4];
+	counter[0] = pageCounter;
+	counter[1] = readPageCounter;
+	counter[2] = writePageCounter;
+	counter[3] = appendPageCounter;
 
-	unsigned init_size = sizeof(record_counters.c_str());
-	_handler->write( record_counters.c_str(), init_size );
-
-	// write the rest of #
-	int rest_of_bytes = PAGE_SIZE - init_size;
-	char rest_chars[rest_of_bytes];
-	for(int i=0;i < rest_of_bytes;i++)
-	{
-		rest_chars[i] = '#';
-	}
-	_handler->write(rest_chars, rest_of_bytes);
+	_handler->write( (char*)counter , sizeof(unsigned)*4 );
 	return;
 }
 // accessory functions

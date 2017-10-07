@@ -253,7 +253,6 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
 		free(slot);
 	}
 	//free pointer and return
-	cout<<"Record Len:"<<localOffset<<endl;
 	free(tmpPage);
 	free(recordAddrPointer);
 	free(nullIndicator);
