@@ -65,7 +65,7 @@ int RBFTest_9(RecordBasedFileManager *rbfm, vector<RID> &rids, vector<int> &size
 
         rc = rbfm->insertRecord(fileHandle, recordDescriptor, record, rid);
         assert(rc == success && "Inserting a record should not fail.");
-        cout<<"rid : "<<i<<endl;
+
         rids.push_back(rid);
         sizes.push_back(size);        
     }

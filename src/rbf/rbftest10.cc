@@ -46,7 +46,6 @@ int RBFTest_10(RecordBasedFileManager *rbfm) {
 
     unsigned pageNum;
     unsigned slotNum;
-    cout<<"Page total:"<<fileHandle.getNumberOfPages()<<endl;
 
     if (ridsFileRead.is_open()) {
         ridsFileRead.seekg(0,ios::beg);

@@ -54,7 +54,7 @@ rbftest12: rbftest12.o librbf.a $(CODEROOT)/rbf/librbf.a
 # dependencies to compile used libraries
 .PHONY: $(CODEROOT)/rbf/librbf.a
 $(CODEROOT)/rbf/librbf.a:
-	$(MAKE) -C $(CODEROOT)/rbf librbf.a -lboost_system
+	$(MAKE) -C $(CODEROOT)/rbf librbf.a
 
 .PHONY: clean
 clean:

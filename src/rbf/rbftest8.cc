@@ -60,7 +60,6 @@ int RBFTest_8(RecordBasedFileManager *rbfm) {
     assert(rc == success && "Inserting a record should not fail.");
     
     // Given the rid, read the record from file
-    cout<<rid.pageNum<<" "<<rid.slotNum<<endl;
     rc = rbfm->readRecord(fileHandle, recordDescriptor, rid, returnedData);
     assert(rc == success && "Reading a record should not fail.");
 
