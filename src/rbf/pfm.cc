@@ -130,7 +130,7 @@ RC FileHandle::readPage(PageNum pageNum, void *data)
 {
     if( (int)pageNum >= getNumberOfPages() )
     {
-    	cout<<"Read page not existed !"<<endl;
+//    	cout<<"Read page not existed !"<<endl;
     	return -1;
     }
 
@@ -149,7 +149,7 @@ RC FileHandle::writePage(PageNum pageNum, const void *data)
 {
     if(pageNum >= pageCounter)
     {
-    	cout<<"pageNum not existed!"<<endl;
+//    	cout<<"pageNum not existed!"<<endl;
     	return -1;
     }
     int page_offset = (pageNum+1)*PAGE_SIZE;

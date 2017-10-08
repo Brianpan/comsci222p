@@ -144,7 +144,7 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
 	void *tmpPage = malloc(PAGE_SIZE);
 
 	int page_id = fileHandle.getNumberOfPages() - 1;
-	if( page_id >= 0 && fileHandle.readPage(page_id, tmpPage) )
+	if( page_id >= 0 && fileHandle.readPage(page_id, tmpPage) == 0 )
 	{
 		//get the last bool
 		RecordMinLen remainSize;
