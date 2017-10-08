@@ -206,7 +206,6 @@ void FileHandle::fetchFileData()
 	//the order of integer is pageCounter, readPageCounter, writePageCounter, appendPageCounter end with #
 	_handler->seekg(0,  ios_base::beg);
 	unsigned counter[4];
-	int p = 0;
 
 	_handler->seekg(0, ios_base::end);
 	ios_base::streampos end_pos = _handler->tellg();
@@ -221,7 +220,7 @@ void FileHandle::fetchFileData()
 		free(firstPage);
 	}
 	// init the hidden page
-	if(p != 4 )
+	else
 	{
 		_handler->seekg(0, ios_base::beg);
 		memset( counter, 0, sizeof(unsigned)*4 );

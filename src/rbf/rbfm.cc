@@ -73,7 +73,8 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
 		// calculate max length
 		maxRecordSize += columnLength;
 
-		bool isNull = nullIndicator[0] & ( 1<<( recordSize - i - 1) );
+		int shiftBit = 8*nullBytes - i - 1;
+		bool isNull = nullIndicator[0] & ( 1<< shiftBit );
 		// NULL case
 		if( isNull )
 		{
@@ -137,49 +138,27 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
 
 	memcpy( (char*)recordData + localOffset, (char*) data + nullBytes, recordActualSize );
 	localOffset += recordActualSize;
-	// test record copy work
-//	RecordMinLen *s = new RecordMinLen;
-//	memcpy(s, recordData, sizeof(RecordMinLen));
-//	cout<<"Len: "<<*s<<endl;
-//
-//	cout<<"EmpLen:";
-//	int ccout;
-//	memcpy( (void*) &ccout, (char*)recordData+localOffset, sizeof(int) );
-//	cout<<ccout;
-//	char *sss = new char[ccout];
-//	memcpy( (void*) sss, (char*)recordData+localOffset+sizeof(int), ccout);
-//	for(int i = 0; i<ccout;i++)
-//	{
-//		cout<<*(sss+i);
-//	}
-//	cout<<"POS:"<<endl;
-//	RecordMinLen r;
-//	memcpy( &r, recordData+sizeof(RecordMinLen)+nullBytes, sizeof(RecordMinLen) );
-//	cout<<r;
-//	cout<<endl;
 
 	// find a page or append page
 	// store tmpPage
 	void *tmpPage = malloc(PAGE_SIZE);
 
-	for(int page_id=0; page_id < (int) fileHandle.getNumberOfPages();page_id++){
-		if( fileHandle.readPage(page_id, tmpPage) )
+	int page_id = fileHandle.getNumberOfPages() - 1;
+	if( page_id >= 0 && fileHandle.readPage(page_id, tmpPage) )
+	{
+		//get the last bool
+		RecordMinLen remainSize;
+		memcpy( (void*) &remainSize, (void*)tmpPage + PAGE_SIZE-sizeof(RecordMinLen) , sizeof(RecordMinLen) );
+		// this page is full continue
+		// should add slot size to record size
+		if( remainSize >= localOffset + sizeof(DIRECTORYSLOT) )
 		{
-			//get the last bool
-			RecordMinLen remainSize;
-			memcpy( (void*) &remainSize, (void*)tmpPage + PAGE_SIZE-sizeof(RecordMinLen) , sizeof(RecordMinLen) );
-			// this page is full continue
-			// should add slot size to record size
-			if( remainSize < localOffset + sizeof(DIRECTORYSLOT) )
-			{
-				continue;
-			}
 			// select pageNum
 			shouldAppendPage = false;
 			pageNum = page_id;
-			break;
 		}
 	}
+
 
 	// insert data into new page
 	if( shouldAppendPage )
@@ -227,7 +206,7 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
 		memcpy( (void*) &slotSize, tmpPage + PAGE_SIZE - 2*sizeof(RecordMinLen), sizeof(RecordMinLen) );
 
 		DIRECTORYSLOT lastSlot;
-		memcpy( (void*) &lastSlot, tmpPage + PAGE_SIZE - 2*sizeof(RecordMinLen) - (slotSize-1)*sizeof(DIRECTORYSLOT), sizeof(DIRECTORYSLOT) );
+		memcpy( (void*) &lastSlot, tmpPage + PAGE_SIZE - 2*sizeof(RecordMinLen) - (slotSize)*sizeof(DIRECTORYSLOT), sizeof(DIRECTORYSLOT) );
 
 		// get curr slotSize
 
@@ -240,7 +219,7 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
 		// update value back
 		memcpy( tmpPage + PAGE_SIZE - sizeof(RecordMinLen), (void*) &restSize, sizeof(RecordMinLen) );
 		memcpy( tmpPage + PAGE_SIZE - 2*sizeof(RecordMinLen), (void*) &slotSize, sizeof(RecordMinLen) );
-		memcpy( tmpPage + PAGE_SIZE - 2*sizeof(RecordMinLen) - (slotSize-1)*sizeof(DIRECTORYSLOT), slot, sizeof(DIRECTORYSLOT) );
+		memcpy( tmpPage + PAGE_SIZE - 2*sizeof(RecordMinLen) - (slotSize)*sizeof(DIRECTORYSLOT), slot, sizeof(DIRECTORYSLOT) );
 		// copy recordData to page
 		memcpy( tmpPage + slot->pageOffset, recordData, localOffset );
 
@@ -314,8 +293,8 @@ RC RecordBasedFileManager::printRecord(const vector<Attribute> &recordDescriptor
     	AttrLength columnLength = recordDescriptor[i].length;
 
     	cout<<columnName<<':'<<'	';
-    	bool isNull = nullIndicator[0] & ( 1<<( recordSize - i - 1) );
-
+    	int shiftBit = 8*nullBytes - i - 1;
+    	bool isNull = nullIndicator[0] & ( 1 << shiftBit );
     	if( !isNull )
     	{
     		if( columnType == TypeVarChar )
@@ -356,7 +335,7 @@ RC RecordBasedFileManager::printRecord(const vector<Attribute> &recordDescriptor
     		}
     	}
     	else{
-    		cout<<'NULL'<<'	';
+    		cout<<"NULL"<<'	';
     	}
 
     }
