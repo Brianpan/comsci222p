@@ -159,6 +159,26 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
 		}
 	}
 
+	//
+	// check page
+	if( (page_id -1) >=0 && shouldAppendPage )
+	{
+		for( int i=0; i<page_id;i++ )
+		{
+			if( fileHandle.readPage(i, tmpPage) == 0 )
+			{
+				RecordMinLen remainSize;
+				memcpy( (void*) &remainSize, (void*)tmpPage + PAGE_SIZE-sizeof(RecordMinLen) , sizeof(RecordMinLen) );
+				if( remainSize >= localOffset + sizeof(DIRECTORYSLOT) )
+				{
+					// select pageNum
+					shouldAppendPage = false;
+					pageNum = i;
+					break;
+				}
+			}
+		}
+	}
 
 	// insert data into new page
 	if( shouldAppendPage )

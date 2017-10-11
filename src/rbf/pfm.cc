@@ -44,7 +44,7 @@ RC PagedFileManager::createFile(const string &fileName)
     fstream fp;
     fp.open(fileName, ios::out);
     if( !fp ){
-    	cout<<"Create file failed !";
+    	//cout<<"Create file failed !";
     	return -1;
     }
     fp.close();
@@ -57,7 +57,7 @@ RC PagedFileManager::destroyFile(const string &fileName)
 
 	if( !isFileExist(fileName) )
     {
-    	cout<<"File not existed !"<<endl;
+    	//cout<<"File not existed !"<<endl;
 		return -1;
     }
 
@@ -72,13 +72,13 @@ RC PagedFileManager::openFile(const string &fileName, FileHandle &fileHandle)
 
 	if(fileHandle._handler != NULL)
 	{
-		cout<<"File handler in used !"<<endl;
+		//cout<<"File handler in used !"<<endl;
 		return -1;
 	}
 
 	if( !isFileExist(fileName) )
 	{
-	    	cout<<"File not existed !"<<endl;
+	    	//cout<<"File not existed !"<<endl;
 			return -1;
 	}
 	// open file
@@ -226,7 +226,7 @@ void FileHandle::fetchFileData()
 		memset( counter, 0, sizeof(unsigned)*4 );
 
 		void* blankPage = malloc(PAGE_SIZE);
-		memcpy( (void*)counter, blankPage, sizeof(unsigned)*4 );
+		memcpy( blankPage, (void*)counter, sizeof(unsigned)*4 );
 
 		_handler->write( (char*) blankPage, PAGE_SIZE );
 	}
@@ -242,8 +242,6 @@ void FileHandle::fetchFileData()
 
 void FileHandle::saveCounter()
 {
-	//
-	int page_offset = -(pageCounter+1)*PAGE_SIZE;
 	//http://www.cplusplus.com/forum/beginner/30644/
 	// back to the first of file pointer
 	_handler->clear();
