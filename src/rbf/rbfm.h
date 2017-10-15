@@ -13,6 +13,9 @@ using namespace std;
 
 
 typedef short int RecordMinLen;
+// MasterPointer means first pointer to point pointer
+// SlavePointer means pointer to pointer's pointer
+typedef enum { Normal, Deleted, MasterPointer, SlavePointer } SlotType;
 
 // Record ID
 typedef struct
@@ -26,14 +29,13 @@ typedef struct
 {
   RecordMinLen pageOffset;
   RecordMinLen recordSize;
+  SlotType slotType;
 } DIRECTORYSLOT;
 
 
 // Attribute
 typedef enum { TypeInt = 0, TypeReal, TypeVarChar } AttrType;
-// MasterPointer means first pointer to point pointer
-// SlavePointer means pointer to pointer's pointer
-typedef enum { Normal, MasterPointer, SlavePointer } SlotType;
+
 
 typedef unsigned AttrLength;
 
@@ -150,5 +152,8 @@ private:
   PagedFileManager *_pf_manager;
 };
 
-int getActualBytesForNullsIndicator(int fieldCount);
+inline int getActualBytesForNullsIndicator(int fieldCount);
+inline unsigned getSlotOffset(int slotNum);
+inline unsigned getSlotCountOffset();
+inline unsigned getRestSizeOffset();
 #endif
