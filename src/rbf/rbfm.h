@@ -31,6 +31,9 @@ typedef struct
 
 // Attribute
 typedef enum { TypeInt = 0, TypeReal, TypeVarChar } AttrType;
+// MasterPointer means first pointer to point pointer
+// SlavePointer means pointer to pointer's pointer
+typedef enum { Normal, MasterPointer, SlavePointer } SlotType;
 
 typedef unsigned AttrLength;
 
