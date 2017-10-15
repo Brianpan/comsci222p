@@ -42,102 +42,17 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
 	int pageNum;
 
 	//prepare record
-	//
 	int recordSize = recordDescriptor.size();
 	RecordMinLen recordAttrCount = recordSize;
-	// copy NULL check addr
-	int nullBytes= getActualBytesForNullsIndicator( recordSize );
-	unsigned char* nullIndicator = (unsigned char*) malloc(nullBytes);
-	memcpy( (void*) nullIndicator, (void*) data, nullBytes );
 
-	// malloc address offset pointer
-	unsigned int recordAddrPointerSize = sizeof(RecordMinLen)*recordSize;
-	void *recordAddrPointer = malloc( recordAddrPointerSize );
-	memset( recordAddrPointer, 0, recordAddrPointerSize );
-
-	// offset of record before insert (column count + recordAddrPointer + nullIndicator)
-	RecordMinLen recordOffset = sizeof(RecordMinLen)*( 1+recordAddrPointerSize ) + nullBytes;
-	// used for fetching data
-	unsigned int dataOffset = nullBytes;
-	// the data of record size
-	unsigned int recordActualSize = 0;
-
-	// maximum size of the record
-	unsigned int maxRecordSize;
-
-	for( int i = 0; i<recordSize;i++ )
-	{
-		AttrType columnType = recordDescriptor[i].type;
-		AttrLength columnLength =recordDescriptor[i].length;
-
-		// calculate max length
-		maxRecordSize += columnLength;
-
-		int shiftBit = 8*nullBytes - i - 1;
-		bool isNull = nullIndicator[0] & ( 1<< shiftBit );
-		// NULL case
-		if( isNull )
-		{
-			continue;
-		}
-
-		// not NULL case
-		switch (columnType)
-		{
-			case TypeVarChar:
-			{
-				int charCount;
-				memcpy( (void*)&charCount, (char*) data + dataOffset, sizeof(int) );
-				// varchar over length
-				if( charCount > columnLength )
-				{
-					free(recordAddrPointer);
-					free(nullIndicator);
-					return -1;
-				}
-				RecordMinLen varcharRecordSize = charCount*sizeof(char) + sizeof(int);
-				recordOffset += varcharRecordSize;
-				recordActualSize += varcharRecordSize;
-				// set recordAddrPointer
-				// each time shift sizeof(RecordMinLen)
-				memcpy( (char*)recordAddrPointer + i*sizeof(RecordMinLen), (void*) &recordOffset, sizeof(RecordMinLen) );
-
-				dataOffset += varcharRecordSize;
-				break;
-			}
-			case TypeInt:
-			{
-				recordOffset += sizeof(int);
-				recordActualSize += sizeof(int);
-
-				memcpy( (char*)recordAddrPointer + i*sizeof(RecordMinLen), (void*) &recordOffset, sizeof(RecordMinLen) );
-				dataOffset += sizeof(int);
-				break;
-			}
-			case TypeReal:
-			{
-				recordOffset += sizeof(float);
-				recordActualSize += sizeof(float);
-
-				memcpy( (char*) recordAddrPointer + i*sizeof(RecordMinLen), (void*) &recordOffset, sizeof(RecordMinLen) );
-				dataOffset += sizeof(float);
-				break;
-			}
-		}
-	}
 	// memcpy data to recordData
 	unsigned int localOffset = 0;
-	void *recordData = malloc(recordOffset);
-	// copy data to recordData
-	memcpy( (char*)recordData, &recordAttrCount, sizeof(RecordMinLen) );
-	localOffset += sizeof(RecordMinLen);
-	memcpy( (char*)recordData + localOffset, nullIndicator, nullBytes );
-	localOffset += nullBytes;
-	memcpy( (char*)recordData + localOffset, (char*)recordAddrPointer, recordAddrPointerSize );
-	localOffset += recordAddrPointerSize;
-
-	memcpy( (char*)recordData + localOffset, (char*) data + nullBytes, recordActualSize );
-	localOffset += recordActualSize;
+	void *recordData = NULL;
+	// use pointer to pointer for malloc in function
+	if( prepareRecord( recordDescriptor, localOffset, &recordData, data ) != 0 )
+	{
+		return -1;
+	}
 
 	// find a page or append page
 	// store tmpPage
@@ -255,8 +170,6 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
 	}
 	//free pointer and return
 	free(tmpPage);
-	free(recordAddrPointer);
-	free(nullIndicator);
 	free(recordData);
 	return 0;
 }
@@ -384,9 +297,108 @@ inline unsigned getSlotCountOffset() {
 inline unsigned getRestSizeOffset() {
 	return ( PAGE_SIZE - sizeof(RecordMinLen) );
 }
+
+
 ///////////////////////
 //Project 2 functions//
 ///////////////////////
+RC RecordBasedFileManager::prepareRecord( const vector<Attribute> &recordDescriptor, unsigned int &localOffset, void **recordData, const void *data ) {
+	int recordSize = recordDescriptor.size();
+	RecordMinLen recordAttrCount = recordSize;
+	// copy NULL check addr
+	int nullBytes= getActualBytesForNullsIndicator( recordSize );
+	unsigned char* nullIndicator = (unsigned char*) malloc(nullBytes);
+	memcpy( (void*) nullIndicator, (void*) data, nullBytes );
+
+	// malloc address offset pointer
+	unsigned int recordAddrPointerSize = sizeof(RecordMinLen)*recordSize;
+	void *recordAddrPointer = malloc( recordAddrPointerSize );
+	memset( recordAddrPointer, 0, recordAddrPointerSize );
+
+	// offset of record before insert (column count + recordAddrPointer + nullIndicator)
+	RecordMinLen recordOffset = sizeof(RecordMinLen)*( 1+recordAddrPointerSize ) + nullBytes;
+	// used for fetching data
+	unsigned int dataOffset = nullBytes;
+	// the data of record size
+	unsigned int recordActualSize = 0;
+
+	for( int i = 0; i<recordSize;i++ )
+	{
+		AttrType columnType = recordDescriptor[i].type;
+		AttrLength columnLength =recordDescriptor[i].length;
+
+		int shiftBit = 8*nullBytes - i - 1;
+		bool isNull = nullIndicator[0] & ( 1<< shiftBit );
+		// NULL case
+		if( isNull )
+		{
+			continue;
+		}
+
+		// not NULL case
+		switch (columnType)
+		{
+			case TypeVarChar:
+			{
+				int charCount;
+				memcpy( (void*)&charCount, (char*) data + dataOffset, sizeof(int) );
+				// varchar over length
+				if( charCount > columnLength )
+				{
+					free(recordAddrPointer);
+					free(nullIndicator);
+					return -1;
+				}
+				RecordMinLen varcharRecordSize = charCount*sizeof(char) + sizeof(int);
+				recordOffset += varcharRecordSize;
+				recordActualSize += varcharRecordSize;
+				// set recordAddrPointer
+				// each time shift sizeof(RecordMinLen)
+				memcpy( (char*)recordAddrPointer + i*sizeof(RecordMinLen), (void*) &recordOffset, sizeof(RecordMinLen) );
+
+				dataOffset += varcharRecordSize;
+				break;
+			}
+			case TypeInt:
+			{
+				recordOffset += sizeof(int);
+				recordActualSize += sizeof(int);
+
+				memcpy( (char*)recordAddrPointer + i*sizeof(RecordMinLen), (void*) &recordOffset, sizeof(RecordMinLen) );
+				dataOffset += sizeof(int);
+				break;
+			}
+			case TypeReal:
+			{
+				recordOffset += sizeof(float);
+				recordActualSize += sizeof(float);
+
+				memcpy( (char*) recordAddrPointer + i*sizeof(RecordMinLen), (void*) &recordOffset, sizeof(RecordMinLen) );
+				dataOffset += sizeof(float);
+				break;
+			}
+		}
+	}
+	// memcpy data to recordData
+	// copy data to recordData
+	*recordData = malloc(recordOffset);
+	memcpy( (char*) *recordData, &recordAttrCount, sizeof(RecordMinLen) );
+	localOffset += sizeof(RecordMinLen);
+	memcpy( (char*) *recordData + localOffset, nullIndicator, nullBytes );
+	localOffset += nullBytes;
+	memcpy( (char*) *recordData + localOffset, (char*)recordAddrPointer, recordAddrPointerSize );
+	localOffset += recordAddrPointerSize;
+
+	memcpy( (char*) *recordData + localOffset, (char*) data + nullBytes, recordActualSize );
+	localOffset += recordActualSize;
+
+	// free
+	free(recordAddrPointer);
+	free(nullIndicator);
+	
+	return 0;
+}
+
 RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const RID &rid) {
 	int maxPage = fileHandle.getNumberOfPages() - 1;
 	int pageNum = rid.pageNum;
@@ -448,3 +460,8 @@ RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle, const vector<Att
 	return 0;
 }
 
+RC RecordBasedFileManager::updateRecord(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const void *data, const RID &rid) {
+	//
+
+	return -1;
+}

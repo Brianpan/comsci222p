@@ -148,6 +148,8 @@ protected:
   ~RecordBasedFileManager();
 
 private:
+  // prepare record accessory function
+  RC prepareRecord( const vector<Attribute> &recordDescriptor, unsigned int &localOffset, void **recordData, const void* data );
   static RecordBasedFileManager *_rbf_manager;
   PagedFileManager *_pf_manager;
 };
