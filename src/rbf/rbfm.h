@@ -15,7 +15,8 @@ using namespace std;
 typedef short int RecordMinLen;
 // MasterPointer means first pointer to point pointer
 // SlavePointer means pointer to pointer's pointer
-typedef enum { Normal, Deleted, MasterPointer, SlavePointer } SlotType;
+// DataPointer means the pointer point to data record
+typedef enum { Normal, Deleted, MasterPointer, SlavePointer, DataPointer } SlotType;
 
 // Record ID
 typedef struct
@@ -31,7 +32,6 @@ typedef struct
   RecordMinLen recordSize;
   SlotType slotType;
 } DIRECTORYSLOT;
-
 
 // Attribute
 typedef enum { TypeInt = 0, TypeReal, TypeVarChar } AttrType;
@@ -150,6 +150,8 @@ protected:
 private:
   // prepare record accessory function
   RC prepareRecord( const vector<Attribute> &recordDescriptor, unsigned int &localOffset, void **recordData, const void* data );
+  RC updateSlotType(FileHandle &fileHandle, RID &rid, SlotType slotType);
+
   static RecordBasedFileManager *_rbf_manager;
   PagedFileManager *_pf_manager;
 };
@@ -158,4 +160,6 @@ inline int getActualBytesForNullsIndicator(int fieldCount);
 inline unsigned getSlotOffset(int slotNum);
 inline unsigned getSlotCountOffset();
 inline unsigned getRestSizeOffset();
+inline unsigned getDeletedPointerOffset();
+inline unsigned getDirectorySize();
 #endif

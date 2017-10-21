@@ -35,7 +35,7 @@ RC PagedFileManager::createFile(const string &fileName)
 {
 	if( isFileExist(fileName) )
     {
-    	cout<<"File already existed !"<<endl;
+//    	cout<<"File already existed !"<<endl;
 		return -1;
     }
 
