@@ -128,6 +128,7 @@ int RBFTest_Delete(RecordBasedFileManager *rbfm)
 	rbfm->printRecord(recordDescriptor, returnedData);
 
 	// Compare whether the two memory blocks are the same
+	cout<<"!!"<<endl;
 	if (memcmp(record, returnedData, recordSize) != 0)
 	{
 		cout << "[FAIL] Test Case Delete Failed!" << endl << endl;
