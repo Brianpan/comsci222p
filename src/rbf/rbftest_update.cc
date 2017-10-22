@@ -28,9 +28,6 @@ void readRecord(RecordBasedFileManager *rbfm, const RID& rid, string str)
 
 	RC rc = rbfm->readRecord(fileHandle, recordDescriptor, rid, returnedData);
 	assert(rc == success && "Reading a record should not fail.");
-	// add by myself
-	rbfm->printRecord( recordDescriptor, returnedData );
-	rbfm->printRecord( recordDescriptor, record );
 	// Compare whether the two memory blocks are the same
 	assert(memcmp(record, returnedData, recordSize) == 0 && "Returned Data should be the same");
 }
@@ -124,14 +121,14 @@ int RBFTest_Update(RecordBasedFileManager *rbfm)
 	updateRecord(rbfm, shortRID, midstr);
 
 	//read updated short record and verify its content
-//	readRecord(rbfm, shortRID, midstr);
+	readRecord(rbfm, shortRID, midstr);
 
 	// insert two more records
 	insertRecord(rbfm, rid, longstr);
 	insertRecord(rbfm, rid, longstr);
 
 	// read mid record and verify its content
-//	readRecord(rbfm, midRID, midstr);
+	readRecord(rbfm, midRID, midstr);
 
 	// update short record
 	updateRecord(rbfm, shortRID, longstr);
