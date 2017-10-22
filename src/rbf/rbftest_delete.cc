@@ -54,6 +54,7 @@ int RBFTest_Delete(RecordBasedFileManager *rbfm)
 	memset(nullsIndicator, 0, nullFieldsIndicatorActualSize);
 
 	// Insert a record into a file and print the record
+	nullsIndicator[0] = 128;
 	prepareRecord(recordDescriptor.size(), nullsIndicator, 8, "", 25, 177.8, 6200, record,
 			&recordSize);
 	cout << endl << "Inserting Data:" << endl;
@@ -67,7 +68,6 @@ int RBFTest_Delete(RecordBasedFileManager *rbfm)
 	memset(nullsIndicator, 0, nullFieldsIndicatorActualSize);
 
 	// Insert a record into a file and print the record
-
 	nullsIndicator[0] = 128;
 	prepareRecord(recordDescriptor.size(), nullsIndicator, 8, "", 25, 177.8, 6200, record,
 			&recordSize);

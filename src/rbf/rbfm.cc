@@ -165,21 +165,21 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
 			bool hasDeletedNode = false;
 			if( newSlotNum > 0 )
 			{
-//				int pivot = 0;
-//				DIRECTORYSLOT *afterCurSlots = new DIRECTORYSLOT[newSlotNum];
-//				memcpy( afterCurSlots, tmpPage + getSlotOffset(deletedPointer+1), sizeof(DIRECTORYSLOT)*newSlotNum );
-//				while( pivot < newSlotNum )
-//				{
-//					if( afterCurSlots[pivot].slotType == Deleted )
-//					{
-//						deletedPointer = pivot + 1 + deletedPointer;
-//						hasDeletedNode = true;
-//						break;
-//					}
-//					pivot++;
-//				}
+				int pivot = 0;
+				DIRECTORYSLOT *afterCurSlots = new DIRECTORYSLOT[newSlotNum];
+				memcpy( afterCurSlots, tmpPage + getSlotOffset(deletedPointer+1), sizeof(DIRECTORYSLOT)*newSlotNum );
+				while( pivot < newSlotNum )
+				{
+					if( afterCurSlots[pivot].slotType == Deleted )
+					{
+						deletedPointer = pivot + 1 + deletedPointer;
+						hasDeletedNode = true;
+						break;
+					}
+					pivot++;
+				}
 
-//				free(afterCurSlots);
+				delete []afterCurSlots;
 			}
 			if( !hasDeletedNode )
 			{
@@ -291,21 +291,23 @@ RC RecordBasedFileManager::readRecord(FileHandle &fileHandle, const vector<Attri
 RC RecordBasedFileManager::printRecord(const vector<Attribute> &recordDescriptor, const void *data) {
     int recordSize = recordDescriptor.size();
 	int nullBytes = getActualBytesForNullsIndicator( recordSize );
-    char* nullIndicator = (char*) malloc(nullBytes);
+    unsigned char* nullIndicator = (unsigned char*) malloc(nullBytes);
     memcpy( nullIndicator, data, nullBytes );
     // loop record
     unsigned int offset = nullBytes;
     string columnName;
     AttrType columnType;
     AttrLength columnLength;
+    unsigned int shiftBit;
+    bool isNull = false;
     for(int i = 0; i<recordSize;i++)
     {
     	columnName = recordDescriptor[i].name;
     	columnType = recordDescriptor[i].type;
     	columnLength = recordDescriptor[i].length;
     	cout<<columnName<<":"<<"	";
-    	int shiftBit = 8*nullBytes - i - 1;
-    	bool isNull = nullIndicator[0] & ( 1 << shiftBit );
+    	shiftBit = 8*nullBytes - i - 1;
+    	isNull = nullIndicator[0] & ( 1 << shiftBit );
     	if( !isNull )
     	{
     		if( columnType == TypeVarChar )
