@@ -13,6 +13,8 @@ using namespace std;
 
 // RM_ScanIterator is an iteratr to go through tuples
 class RM_ScanIterator {
+private:
+	RID cursor;
 public:
   RM_ScanIterator() {};
   ~RM_ScanIterator() {};
@@ -72,7 +74,8 @@ public:
 protected:
   RelationManager();
   ~RelationManager();
-
+private:
+  FileHandle fileHandle;
 };
 
 #endif

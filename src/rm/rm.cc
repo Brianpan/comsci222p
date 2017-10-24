@@ -9,6 +9,8 @@ RelationManager* RelationManager::instance()
 
 RelationManager::RelationManager()
 {
+	// create table of table
+	// create table of attribute
 }
 
 RelationManager::~RelationManager()
@@ -77,7 +79,20 @@ RC RelationManager::scan(const string &tableName,
       const vector<string> &attributeNames,
       RM_ScanIterator &rm_ScanIterator)
 {
-    return -1;
+	RecordBasedFileManager* rbf_manager = RecordBasedFileManager::instance();
+	FileHandle fileHandle;
+	if ( !rbf_manager->openFile( tableName, fileHandle ) )
+		return -1;
+	// prepare recordDescriptor
+	vector<Attribute> recordDescriptor;
+	getAttributes( tableName, recordDescriptor );
+	// run record scan
+	rbf_manager->scan( fileHandle, recordDescriptor, conditionAttribute, compOp, value, attributeNames, rm_ScanIterator );
+
+	if( !rbf_manager->closeFile(fileHandle) )
+		return -1;
+
+	return 0;
 }
 
 // Extra credit work
