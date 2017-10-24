@@ -59,12 +59,25 @@ RC RelationManager::updateTuple(const string &tableName, const void *data, const
 
 RC RelationManager::readTuple(const string &tableName, const RID &rid, void *data)
 {
-    return -1;
+	vector<Attribute> recordDescriptor;
+	getAttributes( tableName, recordDescriptor );
+
+	RecordBasedFileManager* rbf_manager = RecordBasedFileManager::instance();
+	FileHandle fileHandle;
+	if ( rbf_manager->openFile( tableName, fileHandle ) != 0 )
+		return -1;
+
+	if ( rbf_manager->readRecord( fileHandle, recordDescriptor, rid, data ) != 0 )
+		return -1;
+	return 0;
 }
 
 RC RelationManager::printTuple(const vector<Attribute> &attrs, const void *data)
 {
-	return -1;
+	RecordBasedFileManager rbf;
+	if( rbf.printRecord( attrs, data ) != 0 )
+		return -1;
+	return 0;
 }
 
 RC RelationManager::readAttribute(const string &tableName, const RID &rid, const string &attributeName, void *data)
@@ -81,7 +94,7 @@ RC RelationManager::scan(const string &tableName,
 {
 	RecordBasedFileManager* rbf_manager = RecordBasedFileManager::instance();
 	FileHandle fileHandle;
-	if ( !rbf_manager->openFile( tableName, fileHandle ) )
+	if ( rbf_manager->openFile( tableName, fileHandle ) != 0 )
 		return -1;
 	// prepare recordDescriptor
 	vector<Attribute> recordDescriptor;
@@ -89,7 +102,7 @@ RC RelationManager::scan(const string &tableName,
 	// run record scan
 	rbf_manager->scan( fileHandle, recordDescriptor, conditionAttribute, compOp, value, attributeNames, rm_ScanIterator );
 
-	if( !rbf_manager->closeFile(fileHandle) )
+	if( rbf_manager->closeFile(fileHandle) != 0 )
 		return -1;
 
 	return 0;
