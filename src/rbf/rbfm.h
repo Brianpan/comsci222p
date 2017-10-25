@@ -73,9 +73,14 @@ The scan iterator is NOT required to be implemented for the part 1 of the projec
 
 class RBFM_ScanIterator {
 public:
-  RBFM_ScanIterator() {};
-  ~RBFM_ScanIterator() {};
-
+  RBFM_ScanIterator();
+  ~RBFM_ScanIterator();
+  RID _cursor;
+  // save iter information
+  bool _isFirstIter;
+  CompOp _compOp;
+  vector<Attribute> _recordDescriptor;
+  void* _data;
   // Never keep the results in the memory. When getNextRecord() is called, 
   // a satisfying record needs to be fetched from the file.
   // "data" follows the same format as RecordBasedFileManager::insertRecord().
@@ -141,7 +146,17 @@ IMPORTANT, PLEASE READ: All methods below this comment (other than the construct
       const vector<string> &attributeNames, // a list of projected attributes
       RBFM_ScanIterator &rbfm_ScanIterator);
 
-public:
+  // accessory method for checking record is matched the criteria
+  RC checkRecord(FileHandle &fileHandle,
+	  const vector<Attribute> &recordDescriptor,
+	  const string &conditionAttribute,
+	  const CompOp compOp,                  // comparision type such as "<" and "="
+	  const void *value,                    // used in the comparison
+	  const vector<string> &attributeNames, // a list of projected attributes
+	  void *data,
+	  const RID rid,
+	  void *page);
+  unsigned getRecordSize(const vector<Attribute> &recordDescriptor);
 
 protected:
   RecordBasedFileManager();

@@ -781,5 +781,184 @@ RC RecordBasedFileManager::scan(FileHandle &fileHandle,
 	      const vector<string> &attributeNames, // a list of projected attributes
 	      RBFM_ScanIterator &rbfm_ScanIterator){
 
+	// check rbfm pointer
+	unsigned pageNum = 0;
+	unsigned slotNum = 0;
+	if( !rbfm_ScanIterator._isFirstIter )
+	{
+		pageNum = rbfm_ScanIterator._cursor.pageNum;
+		slotNum = rbfm_ScanIterator._cursor.slotNum + 1;
+	}
 
+	int maxPage = fileHandle.getNumberOfPages() - 1;
+	void *tmpPage = malloc(PAGE_SIZE);
+	RecordMinLen curTotalSlot;
+
+	if( pageNum > maxPage || fileHandle.readPage(pageNum, tmpPage) != 0 )
+	{
+		free(tmpPage);
+		return -1;
+	}
+
+	memcpy( &curTotalSlot, tmpPage + getSlotCountOffset(), sizeof(RecordMinLen) );
+
+	if( slotNum >= curTotalSlot )
+	{
+		// no more data to search for
+		if( maxPage == pageNum )
+		{
+			return -1;
+		}
+		// treverse next page
+		else
+		{
+			pageNum += 1;
+			slotNum = 0;
+			if( fileHandle.readPage(pageNum, tmpPage) != 0 )
+			{
+				free(tmpPage);
+				return -1;
+			}
+		}
+
+	}
+	unsigned recordMaxSize = getRecordSize( recordDescriptor );
+	void *tmpData = malloc(recordMaxSize);
+	RID tmpRid;
+	DIRECTORYSLOT tmpSlot;
+	// treverse records in page
+	unsigned curSlotId = slotNum;
+	unsigned curPageId = pageNum;
+	bool notScan = true;
+	while(notScan && curTotalSlot > 0)
+	{
+		if(curPageId >  maxPage)
+		{
+			break;
+		}
+		// read new page
+		if( curPageId != pageNum )
+		{
+			fileHandle.readPage(curPageId, tmpPage);
+			memcpy( &curTotalSlot, tmpPage + getSlotCountOffset(), sizeof(RecordMinLen) );
+			while( curTotalSlot == 0 && curPageId < maxPage )
+			{
+				curPageId += 1;
+				fileHandle.readPage(curPageId, tmpPage);
+				memcpy( &curTotalSlot, tmpPage + getSlotCountOffset(), sizeof(RecordMinLen) );
+			}
+			// in the maxpage still has nothing to read
+			if(curTotalSlot == 0)
+			{
+				break;
+			}
+			pageNum = curPageId;
+		}
+
+		tmpRid.pageNum = curPageId;
+		tmpRid.slotNum = curSlotId;
+		memcpy(&tmpSlot, tmpPage+getSlotOffset(curSlotId), sizeof(DIRECTORYSLOT) );
+		SlotType slotType = tmpSlot.slotType;
+		// treverse only when the slotType is Normal or MasterPointer
+		if( slotType == Normal || slotType == MasterPointer )
+		{
+			if( checkRecord( fileHandle, recordDescriptor, conditionAttribute, compOp, value, attributeNames, tmpData, tmpRid, tmpPage ) == 0 )
+			{
+				notScan = false;
+				break;
+			}
+		}
+
+		// iteration params updating
+		if( (curSlotId + 1) < curTotalSlot )
+		{
+			curSlotId += 1;
+		}
+		else{
+			curPageId += 1;
+			curSlotId = 0;
+		}
+	}
+
+	RC success = -1;
+	if( !notScan )
+	{
+		success = 0;
+		rbfm_ScanIterator._cursor = tmpRid;
+		if( rbfm_ScanIterator._isFirstIter )
+		{
+			rbfm_ScanIterator._isFirstIter = false;
+			rbfm_ScanIterator._compOp = compOp;
+			rbfm_ScanIterator._data = (void*)value;
+			rbfm_ScanIterator._recordDescriptor = recordDescriptor;
+		}
+	}
+	else
+	{
+		rbfm_ScanIterator._isFirstIter = true;
+	}
+
+	free(tmpPage);
+	free(tmpData);
+	return success;
+}
+
+RC RecordBasedFileManager::checkRecord( FileHandle &fileHandle,
+	  const vector<Attribute> &recordDescriptor,
+	  const string &conditionAttribute,
+	  const CompOp compOp,                  // comparision type such as "<" and "="
+	  const void *value,                    // used in the comparison
+	  const vector<string> &attributeNames, // a list of projected attributes
+	  void *data,
+	  const RID rid,
+	  void *page) {
+	// readRecord failed
+	if( readRecord( fileHandle, recordDescriptor, rid, data ) != 0 )
+	{
+		return -1;
+	}
+
+}
+
+unsigned RecordBasedFileManager::getRecordSize(const vector<Attribute> &recordDescriptor) {
+    unsigned recordMaxSize = 0;
+	int recordSize = recordDescriptor.size();
+	int nullBytes = getActualBytesForNullsIndicator( recordSize );
+	unsigned int recordAddrPointerSize = sizeof(RecordMinLen)*recordSize;
+	//!!! may change when dealing with bonus
+	// column count + recordAddrPointer + nullIndicator
+	recordMaxSize += nullBytes + sizeof(RecordMinLen)*( 1+recordAddrPointerSize );
+	// loop record
+    string columnName;
+    AttrType columnType;
+    AttrLength columnLength;
+
+    for(int i = 0; i<recordSize;i++)
+    {
+    	columnName = recordDescriptor[i].name;
+    	columnType = recordDescriptor[i].type;
+    	columnLength = recordDescriptor[i].length;
+
+    	if( columnType == TypeVarChar )
+    	{
+    			recordMaxSize += columnLength + sizeof(int);
+    	}
+    	else
+    	{
+    		recordMaxSize += columnLength;
+    	}
+
+    }
+
+    return recordMaxSize;
+}
+
+// RBFM_ScanIterator
+
+RBFM_ScanIterator::RBFM_ScanIterator(){
+	_isFirstIter = true;
+	_data = 0;
+}
+
+RBFM_ScanIterator::~RBFM_ScanIterator(){
 }
