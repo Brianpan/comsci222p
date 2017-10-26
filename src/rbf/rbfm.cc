@@ -382,6 +382,10 @@ inline unsigned getDeletedPointerOffset() {
 inline unsigned getDirectorySize() {
 	return ( sizeof(DIRECTORYSLOT) + 3*sizeof(RecordMinLen) );
 }
+
+inline unsigned getNullBytesOffset() {
+	return sizeof(RecordMinLen);
+}
 ///////////////////////
 //Project 2 functions//
 ///////////////////////
@@ -415,6 +419,7 @@ RC RecordBasedFileManager::prepareRecord( const vector<Attribute> &recordDescrip
 		// NULL case
 		if( isNull )
 		{
+			memcpy( (char*)recordAddrPointer + i*sizeof(RecordMinLen), (void*) &recordOffset, sizeof(RecordMinLen) );
 			continue;
 		}
 
@@ -781,26 +786,52 @@ RC RecordBasedFileManager::scan(FileHandle &fileHandle,
 	      const vector<string> &attributeNames, // a list of projected attributes
 	      RBFM_ScanIterator &rbfm_ScanIterator){
 
+	unsigned recordSize = recordDescriptor.size();
+	string recordName[recordSize];
+
+	rbfm_ScanIterator._recordDescriptor = recordDescriptor;
+	rbfm_ScanIterator._conditionAttribute = conditionAttribute;
+	rbfm_ScanIterator._compOp = compOp;
+	rbfm_ScanIterator._value = (void*)value;
+	rbfm_ScanIterator._attributeNames = attributeNames;
+	rbfm_ScanIterator._fileHandle = fileHandle;
+	return 0;
+}
+
+
+// RBFM_ScanIterator
+
+RBFM_ScanIterator::RBFM_ScanIterator(){
+	_isFirstIter = true;
+	_value = 0;
+	_tmpPage = malloc(PAGE_SIZE);
+}
+
+RBFM_ScanIterator::~RBFM_ScanIterator(){
+	free(_tmpPage);
+}
+
+RC RBFM_ScanIterator::getNextRecord(RID &rid, void *data){
 	// check rbfm pointer
 	unsigned pageNum = 0;
 	unsigned slotNum = 0;
-	if( !rbfm_ScanIterator._isFirstIter )
+	int maxPage = _fileHandle.getNumberOfPages() - 1;
+
+	if( !_isFirstIter )
 	{
-		pageNum = rbfm_ScanIterator._cursor.pageNum;
-		slotNum = rbfm_ScanIterator._cursor.slotNum + 1;
+		pageNum = _cursor.pageNum;
+		slotNum = _cursor.slotNum + 1;
+
+		if( pageNum > maxPage || _fileHandle.readPage(pageNum, _tmpPage) != 0 )
+		{
+			return -1;
+		}
 	}
 
-	int maxPage = fileHandle.getNumberOfPages() - 1;
-	void *tmpPage = malloc(PAGE_SIZE);
+
 	RecordMinLen curTotalSlot;
 
-	if( pageNum > maxPage || fileHandle.readPage(pageNum, tmpPage) != 0 )
-	{
-		free(tmpPage);
-		return -1;
-	}
-
-	memcpy( &curTotalSlot, tmpPage + getSlotCountOffset(), sizeof(RecordMinLen) );
+	memcpy( &curTotalSlot, _tmpPage + getSlotCountOffset(), sizeof(RecordMinLen) );
 
 	if( slotNum >= curTotalSlot )
 	{
@@ -814,15 +845,14 @@ RC RecordBasedFileManager::scan(FileHandle &fileHandle,
 		{
 			pageNum += 1;
 			slotNum = 0;
-			if( fileHandle.readPage(pageNum, tmpPage) != 0 )
+			if( _fileHandle.readPage(pageNum, _tmpPage) != 0 )
 			{
-				free(tmpPage);
 				return -1;
 			}
 		}
 
 	}
-	unsigned recordMaxSize = getRecordSize( recordDescriptor );
+	unsigned recordMaxSize = getRecordSize( _recordDescriptor );
 	void *tmpData = malloc(recordMaxSize);
 	RID tmpRid;
 	DIRECTORYSLOT tmpSlot;
@@ -839,13 +869,13 @@ RC RecordBasedFileManager::scan(FileHandle &fileHandle,
 		// read new page
 		if( curPageId != pageNum )
 		{
-			fileHandle.readPage(curPageId, tmpPage);
-			memcpy( &curTotalSlot, tmpPage + getSlotCountOffset(), sizeof(RecordMinLen) );
+			_fileHandle.readPage(curPageId, _tmpPage);
+			memcpy( &curTotalSlot, _tmpPage + getSlotCountOffset(), sizeof(RecordMinLen) );
 			while( curTotalSlot == 0 && curPageId < maxPage )
 			{
 				curPageId += 1;
-				fileHandle.readPage(curPageId, tmpPage);
-				memcpy( &curTotalSlot, tmpPage + getSlotCountOffset(), sizeof(RecordMinLen) );
+				_fileHandle.readPage(curPageId, _tmpPage);
+				memcpy( &curTotalSlot, _tmpPage + getSlotCountOffset(), sizeof(RecordMinLen) );
 			}
 			// in the maxpage still has nothing to read
 			if(curTotalSlot == 0)
@@ -857,12 +887,12 @@ RC RecordBasedFileManager::scan(FileHandle &fileHandle,
 
 		tmpRid.pageNum = curPageId;
 		tmpRid.slotNum = curSlotId;
-		memcpy(&tmpSlot, tmpPage+getSlotOffset(curSlotId), sizeof(DIRECTORYSLOT) );
+		memcpy(&tmpSlot, _tmpPage+getSlotOffset(curSlotId), sizeof(DIRECTORYSLOT) );
 		SlotType slotType = tmpSlot.slotType;
 		// treverse only when the slotType is Normal or MasterPointer
 		if( slotType == Normal || slotType == MasterPointer )
 		{
-			if( checkRecord( fileHandle, recordDescriptor, conditionAttribute, compOp, value, attributeNames, tmpData, tmpRid, tmpPage ) == 0 )
+			if( checkRecord(tmpRid, tmpData) == 0 )
 			{
 				notScan = false;
 				break;
@@ -880,47 +910,349 @@ RC RecordBasedFileManager::scan(FileHandle &fileHandle,
 		}
 	}
 
-	RC success = -1;
-	if( !notScan )
-	{
-		success = 0;
-		rbfm_ScanIterator._cursor = tmpRid;
-		if( rbfm_ScanIterator._isFirstIter )
-		{
-			rbfm_ScanIterator._isFirstIter = false;
-			rbfm_ScanIterator._compOp = compOp;
-			rbfm_ScanIterator._data = (void*)value;
-			rbfm_ScanIterator._recordDescriptor = recordDescriptor;
-		}
-	}
-	else
-	{
-		rbfm_ScanIterator._isFirstIter = true;
-	}
-
-	free(tmpPage);
 	free(tmpData);
-	return success;
+	return 0;
 }
 
-RC RecordBasedFileManager::checkRecord( FileHandle &fileHandle,
-	  const vector<Attribute> &recordDescriptor,
-	  const string &conditionAttribute,
-	  const CompOp compOp,                  // comparision type such as "<" and "="
-	  const void *value,                    // used in the comparison
-	  const vector<string> &attributeNames, // a list of projected attributes
-	  void *data,
-	  const RID rid,
-	  void *page) {
+
+
+RC RBFM_ScanIterator::checkRecord(const RID rid, void* data) {
 	// readRecord failed
-	if( readRecord( fileHandle, recordDescriptor, rid, data ) != 0 )
+	if( readFullRecord( rid, data ) != 0 )
 	{
 		return -1;
 	}
 
+	// if no condition return 0
+	if( _compOp == NO_OP )
+	{
+		return 0;
+	}
+
+	int recordSize = _recordDescriptor.size();
+	int nullBytes = getActualBytesForNullsIndicator( recordSize );
+	unsigned char* nullIndicator = (unsigned char*) malloc(nullBytes);
+	memcpy( nullIndicator, data+getNullBytesOffset(), nullBytes );
+	// loop record
+	unsigned int offset = nullBytes;
+	string columnName;
+	AttrType columnType;
+	AttrLength columnLength;
+	unsigned int shiftBit;
+	bool isNull = false;
+
+
+	// which one is dest column
+	unsigned columnPivot = 0;
+
+	for( int i=0;i<recordSize;i++ )
+	{
+		columnName = _recordDescriptor[i].name;
+		columnType = _recordDescriptor[i].type;
+		columnLength = _recordDescriptor[i].length;
+
+		shiftBit = 8*nullBytes - i - 1;
+		isNull = nullIndicator[0] & ( 1 << shiftBit );
+		if( columnName == _conditionAttribute )
+		{
+			columnPivot = i;
+			break;
+		}
+	}
+	shiftBit = 8*nullBytes - columnPivot - 1;
+	isNull = nullIndicator[0] & ( 1 << shiftBit );
+	RC success = -1;
+
+	if( isNull )
+	{
+
+		if( _compOp == EQ_OP)
+		{
+			if( _value == NULL )
+			{
+				success = 0;
+			}
+		}
+		if( _compOp == NE_OP )
+		{
+			if( _value != NULL )
+			{
+				success = 0;
+			}
+		}
+		free(nullIndicator);
+		return success;
+	}
+
+	// not NULL case
+	void *destColumnData;
+
+	RecordMinLen addressPointerOffset = getNullBytesOffset() + nullBytes + columnPivot*sizeof(RecordMinLen);
+	RecordMinLen addressColumnEndOffset;
+	memcpy( &addressColumnEndOffset, data+addressPointerOffset, sizeof(RecordMinLen) );
+
+	RecordMinLen addressColumnStartOffset = getNullBytesOffset() + nullBytes +recordSize*sizeof(RecordMinLen);
+	if(columnPivot != 0)
+	{
+		unsigned addressPrevPointerOffset = getNullBytesOffset() + nullBytes + (columnPivot-1)*sizeof(RecordMinLen);
+		memcpy( &addressColumnStartOffset, data+addressPrevPointerOffset, sizeof(RecordMinLen) );
+	}
+	unsigned destColumnSize = addressColumnEndOffset - addressColumnStartOffset;
+
+	// copy destColumnData
+	destColumnData = malloc(destColumnSize);
+	memcpy( destColumnData, data+addressColumnStartOffset, destColumnSize );
+
+	// prepare data for varchar
+	int compLen;
+	int destLen;
+	void *compColumn;
+	void *destColumn;
+	if( columnType == TypeVarChar )
+	{
+		memcpy( &compLen, _value, sizeof(int) );
+		memcpy( &destLen, destColumnData, sizeof(int) );
+		compColumn = malloc(compLen);
+		destColumn = malloc(destLen);
+
+		memcpy( compColumn, _value+sizeof(int), compLen );
+		memcpy( destColumn, destColumnData+sizeof(int), destLen );
+	}
+	else
+	{
+		int allocateSize = columnType == TypeInt ? sizeof(int) : sizeof(float);
+
+		compLen = allocateSize;
+		destLen = allocateSize;
+
+		compColumn = malloc(compLen);
+		destColumn = malloc(destLen);
+
+		memcpy( compColumn, _value, compLen );
+		memcpy( destColumn, destColumnData, destLen );
+	}
+
+	bool compBool = false; 
+	switch( _compOp )
+	{
+		case EQ_OP:
+		{
+			if( compLen != destLen )
+			{
+				success = -1;
+				break;
+			}
+			if( memcmp(destColumn, compColumn, compLen) == 0)
+			{
+				success = 0;
+				break;
+			}
+			break;
+		}
+		case LT_OP:
+		{
+			if( columnType == TypeVarChar )
+			{
+				if ( strcmp( (char*)destColumn, (char*)compColumn ) < 0 )
+				{
+					success = 0;
+					break;
+				}
+			}
+			else
+			{
+				if( columnType == TypeInt )
+				{
+					compBool = ( (int*)destColumn < (int*)compColumn );
+				}
+				else
+				{
+					compBool = ( (float*)destColumn < (float*)compColumn );
+				}
+				if( compBool )
+				{
+					success = 0;
+					break;
+				}
+			}
+			break;
+		}
+		case LE_OP:
+		{
+			if( columnType == TypeVarChar )
+			{
+				if ( strcmp( (char*)destColumn, (char*)compColumn ) <= 0 )
+				{
+					success = 0;
+					break;
+				}
+			}
+			else
+			{
+				if( columnType == TypeInt )
+				{
+					compBool = ( (int*)destColumn <= (int*)compColumn );
+				}
+				else
+				{
+					compBool = ( (float*)destColumn <= (float*)compColumn );
+				}
+				if( compBool )
+				{
+					success = 0;
+					break;
+				}
+			}
+			break;
+		}
+		case GT_OP:
+		{
+			if( columnType == TypeVarChar )
+			{
+				if ( strcmp( (char*)destColumn, (char*)compColumn ) > 0 )
+				{
+					success = 0;
+					break;
+				}
+			}
+			else
+			{
+				if( columnType == TypeInt )
+				{
+					compBool = ( (int*)destColumn > (int*)compColumn );
+				}
+				else
+				{
+					compBool = ( (float*)destColumn > (float*)compColumn );
+				}
+				if( compBool )
+				{
+					success = 0;
+					break;
+				}
+			}
+			break;
+		}
+		case GE_OP:
+		{
+			if( columnType == TypeVarChar )
+			{
+				if ( strcmp( (char*)destColumn, (char*)compColumn ) >= 0 )
+				{
+					success = 0;
+					break;
+				}
+			}
+			else
+			{
+				if( columnType == TypeInt )
+				{
+					compBool = ( (int*)destColumn >= (int*)compColumn );
+				}
+				else
+				{
+					compBool = ( (float*)destColumn >= (float*)compColumn );
+				}
+				if( compBool )
+				{
+					success = 0;
+					break;
+				}
+			}
+			break;
+		}
+		case NE_OP:
+		{
+			if( columnType == TypeVarChar )
+			{
+				if( compLen != destLen )
+				{
+					success = 0;
+					break;
+				}
+				if ( strcmp( (char*)destColumn, (char*)compColumn ) != 0 )
+				{
+					success = 0;
+					break;
+				}
+			}
+			else
+			{
+				if( columnType == TypeInt )
+				{
+					compBool = ( (int*)destColumn != (int*)compColumn );
+				}
+				else
+				{
+					compBool = ( (float*)destColumn != (float*)compColumn );
+				}
+				if( compBool )
+				{
+					success = 0;
+					break;
+				}
+			}
+			break;
+		}
+	}
+
+
+	free(compColumn);
+	free(destColumn);
+
+	free(destColumnData);
+	free(nullIndicator);
+	return success;
 }
 
-unsigned RecordBasedFileManager::getRecordSize(const vector<Attribute> &recordDescriptor) {
+RC RBFM_ScanIterator::readFullRecord(const RID &rid, void *data) {
+    unsigned pageNum = rid.pageNum;
+    unsigned slotNum = rid.slotNum;
+    int recordSize = _recordDescriptor.size();
+    // read page first
+    void* tmpPage = malloc(PAGE_SIZE);
+    if( _fileHandle.readPage(pageNum, tmpPage) == -1 )
+    {
+    	return  -1;
+    }
+    // get record offset
+    DIRECTORYSLOT slot;
+    memcpy( (void*) &slot, tmpPage + getSlotOffset(slotNum), sizeof(DIRECTORYSLOT) );
+
+
+    RecordMinLen pageOffset =  slot.pageOffset;
+    RecordMinLen tmpSize = slot.recordSize;
+    SlotType slotType = slot.slotType;
+
+    // record deleted
+    if( slotType == Deleted ) return -1;
+
+    RID tmpRid;
+    while( slotType == MasterPointer || slotType == SlavePointer )
+    {
+    	memcpy( &tmpRid, tmpPage + slot.pageOffset, sizeof(RID) );
+    	pageNum = tmpRid.pageNum;
+    	slotNum = tmpRid.slotNum;
+    	if( _fileHandle.readPage(pageNum, tmpPage) == -1 )
+    	{
+    	    free(tmpPage);
+    		return -1;
+    	}
+    	memcpy( (void*) &slot, tmpPage + getSlotOffset(slotNum), sizeof(DIRECTORYSLOT) );
+    	pageOffset = slot.pageOffset;
+    	tmpSize = slot.recordSize;
+    	slotType = slot.slotType;
+    }
+
+    // copy to dest
+    memcpy( data, tmpPage+pageOffset, tmpSize );
+
+    // free memory
+    free(tmpPage);
+	return 0;
+}
+
+unsigned getRecordSize(const vector<Attribute> &recordDescriptor) {
     unsigned recordMaxSize = 0;
 	int recordSize = recordDescriptor.size();
 	int nullBytes = getActualBytesForNullsIndicator( recordSize );
@@ -947,18 +1279,7 @@ unsigned RecordBasedFileManager::getRecordSize(const vector<Attribute> &recordDe
     	{
     		recordMaxSize += columnLength;
     	}
-
     }
 
     return recordMaxSize;
-}
-
-// RBFM_ScanIterator
-
-RBFM_ScanIterator::RBFM_ScanIterator(){
-	_isFirstIter = true;
-	_data = 0;
-}
-
-RBFM_ScanIterator::~RBFM_ScanIterator(){
 }

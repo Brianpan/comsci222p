@@ -78,13 +78,20 @@ public:
   RID _cursor;
   // save iter information
   bool _isFirstIter;
-  CompOp _compOp;
   vector<Attribute> _recordDescriptor;
-  void* _data;
+  string _conditionAttribute;
+  CompOp _compOp;
+  vector<string> _attributeNames;
+  void* _value;
+  void* _tmpPage;
+  FileHandle _fileHandle;
+
   // Never keep the results in the memory. When getNextRecord() is called, 
   // a satisfying record needs to be fetched from the file.
   // "data" follows the same format as RecordBasedFileManager::insertRecord().
-  RC getNextRecord(RID &rid, void *data) { return RBFM_EOF; };
+  RC getNextRecord(RID &rid, void *data);
+  RC checkRecord(const RID rid, void *data);
+  RC readFullRecord(const RID &rid, void *data);
   RC close() { return -1; };
 };
 
@@ -146,17 +153,7 @@ IMPORTANT, PLEASE READ: All methods below this comment (other than the construct
       const vector<string> &attributeNames, // a list of projected attributes
       RBFM_ScanIterator &rbfm_ScanIterator);
 
-  // accessory method for checking record is matched the criteria
-  RC checkRecord(FileHandle &fileHandle,
-	  const vector<Attribute> &recordDescriptor,
-	  const string &conditionAttribute,
-	  const CompOp compOp,                  // comparision type such as "<" and "="
-	  const void *value,                    // used in the comparison
-	  const vector<string> &attributeNames, // a list of projected attributes
-	  void *data,
-	  const RID rid,
-	  void *page);
-  unsigned getRecordSize(const vector<Attribute> &recordDescriptor);
+  RC readFullRecord(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const RID &rid, void *data);
 
 protected:
   RecordBasedFileManager();
@@ -177,4 +174,8 @@ inline unsigned getSlotCountOffset();
 inline unsigned getRestSizeOffset();
 inline unsigned getDeletedPointerOffset();
 inline unsigned getDirectorySize();
+
+inline unsigned getNullBytesOffset();
+
+unsigned getRecordSize(const vector<Attribute> &recordDescriptor);
 #endif
