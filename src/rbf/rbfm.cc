@@ -835,6 +835,113 @@ RC RecordBasedFileManager::scan(FileHandle &fileHandle,
 	return 0;
 }
 
+// read attribute
+RC RecordBasedFileManager::readAttribute(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const RID &rid, const string &attributeName, void *data){
+	RecordMinLen pageNum = rid.pageNum;
+	RecordMinLen slotNum = rid.slotNum;
+	void *tmpPage = malloc(PAGE_SIZE);
+
+	if( fileHandle.readPage(pageNum, tmpPage) != 0 )
+	{
+		free(tmpPage);
+		return -1;
+	}
+
+	DIRECTORYSLOT slot;
+	memcpy( &slot, tmpPage+getSlotOffset(slotNum), sizeof(DIRECTORYSLOT) );
+
+
+	RID tmpRid;
+	// traverse nodes til point to data
+	while( slot.slotType == MasterPointer || slot.slotType == SlavePointer )
+	{
+		memcpy( &tmpRid, tmpPage+slot.pageOffset, slot.recordSize );
+		if( tmpRid.pageNum != pageNum )
+		{
+			if( fileHandle.readPage( tmpRid.pageNum, tmpPage ) != 0 )
+			{
+				free(tmpPage);
+				return -1;
+			}
+			pageNum = tmpRid.pageNum;
+		}
+
+		slotNum = tmpRid.slotNum;
+		memcpy( &slot, tmpPage+getSlotOffset(slotNum), sizeof(DIRECTORYSLOT) );
+	}
+
+	void *tmpData = malloc(slot.recordSize);
+	memcpy( tmpData, tmpPage+slot.pageOffset, slot.recordSize );
+
+	int recordColumnLen = recordDescriptor.size();
+	int nullBytes = getActualBytesForNullsIndicator( recordColumnLen );
+	unsigned char* nullIndicator = (unsigned char*) malloc(nullBytes);
+	memcpy( (void*) nullIndicator, (void*) tmpData + getNullBytesOffset(), nullBytes );
+
+	string columnName;
+	AttrType columnType;
+	AttrLength columnLength;
+	bool success = -1;
+	unsigned char *destColumnNullIndicator = (unsigned char*) malloc(1);
+
+	for( int i=0; i<recordColumnLen; i++ )
+	{
+		columnName = recordDescriptor[i].name;
+
+		if( columnName == attributeName )
+		{
+			int shiftBit = 8*nullBytes - i - 1;
+			int nullIndex = nullBytes - (int)(shiftBit/8) - 1;
+			bool isNull = nullIndicator[nullIndex] & ( 1<<(shiftBit%8) );
+
+			if( isNull )
+			{
+				destColumnNullIndicator[0] = 1;
+				success = 0;
+				break;
+			}
+
+			destColumnNullIndicator[0] = 0;
+			columnType = recordDescriptor[i].type;
+			columnLength = recordDescriptor[i].length;
+
+			if( columnType == TypeVarChar )
+			{
+				RecordMinLen addressColumnStartOffset;
+				RecordMinLen addressColumnEndOffset;
+				if( getColumnStartAndEndPivot( addressColumnStartOffset, addressColumnEndOffset, i, nullBytes, tmpData, recordDescriptor ) != 0 )
+				{
+					break;
+				}
+
+				unsigned columnSize = addressColumnEndOffset - addressColumnStartOffset;
+				memcpy( data+1, tmpData+addressColumnStartOffset, columnSize );
+
+				success = 0;
+				break;
+			}
+			else
+			{
+				RecordMinLen addressColumnEndOffset;
+				RecordMinLen addressPointerOffset = getNullBytesOffset() + nullBytes + i*sizeof(RecordMinLen);
+				memcpy( &addressColumnEndOffset, tmpData+addressPointerOffset, sizeof(RecordMinLen) );
+
+				memcpy( data+1, tmpData+addressColumnEndOffset-columnLength, columnLength );
+				success = 0;
+				break;
+			}
+		}
+	}
+
+	// copy null indicator to data
+	memcpy( data, destColumnNullIndicator, 1 );
+	free(destColumnNullIndicator);
+	free(nullIndicator);
+	free(tmpData);
+	free(tmpPage);
+	return success;
+
+}
 
 // RBFM_ScanIterator
 
@@ -845,10 +952,10 @@ RBFM_ScanIterator::RBFM_ScanIterator(){
 }
 
 RBFM_ScanIterator::~RBFM_ScanIterator(){
-	free(_tmpPage);
 }
 
 RC RBFM_ScanIterator::close(){
+	free(_tmpPage);
 	return 0;
 }
 RC RBFM_ScanIterator::getNextRecord(RID &rid, void *data){
@@ -999,7 +1106,7 @@ RC RBFM_ScanIterator::prepareRecord(void *fetchedData, void *data){
 		{
 			RecordMinLen addressColumnStartOffset;
 			RecordMinLen addressColumnEndOffset;
-			getColumnStartAndEndPivot( addressColumnStartOffset, addressColumnEndOffset, (int) columnIndex, nullBytes, fetchedData );
+			getColumnStartAndEndPivot( addressColumnStartOffset, addressColumnEndOffset, (int) columnIndex, nullBytes, fetchedData, _recordDescriptor );
 
 			unsigned destColumnSize = addressColumnEndOffset - addressColumnStartOffset;
 			memcpy( data+newRecordOffset, fetchedData + addressColumnStartOffset, destColumnSize );
@@ -1015,20 +1122,7 @@ RC RBFM_ScanIterator::prepareRecord(void *fetchedData, void *data){
 	return success;
 }
 
-RC RBFM_ScanIterator::getColumnStartAndEndPivot(RecordMinLen &addressColumnStartOffset, RecordMinLen &addressColumnEndOffset, int columnIndex, int nullBytes, void *data){
-	RecordMinLen addressPointerOffset = getNullBytesOffset() + nullBytes + columnIndex*sizeof(RecordMinLen);
-	int recordSize = _recordDescriptor.size();
-	memcpy( &addressColumnEndOffset, data+addressPointerOffset, sizeof(RecordMinLen) );
 
-	addressColumnStartOffset = getNullBytesOffset() + nullBytes + recordSize*sizeof(RecordMinLen);
-	if(columnIndex != 0)
-	{
-		unsigned addressPrevPointerOffset = getNullBytesOffset() + nullBytes + (columnIndex-1)*sizeof(RecordMinLen);
-		memcpy( &addressColumnStartOffset, data+addressPrevPointerOffset, sizeof(RecordMinLen) );
-	}
-
-	return 0;
-}
 RC RBFM_ScanIterator::checkRecord(const RID rid, void* data) {
 	// readRecord failed
 	if( readFullRecord( rid, data ) != 0 )
@@ -1088,7 +1182,7 @@ RC RBFM_ScanIterator::checkRecord(const RID rid, void* data) {
 	RecordMinLen addressColumnStartOffset;
 	RecordMinLen addressColumnEndOffset;
 
-	getColumnStartAndEndPivot( addressColumnStartOffset, addressColumnEndOffset, (int) columnPivot, nullBytes, data );
+	getColumnStartAndEndPivot( addressColumnStartOffset, addressColumnEndOffset, (int) columnPivot, nullBytes, data, _recordDescriptor );
 	unsigned destColumnSize = addressColumnEndOffset - addressColumnStartOffset;
 
 	// copy destColumnData
@@ -1374,4 +1468,20 @@ unsigned getRecordSize(const vector<Attribute> &recordDescriptor) {
     }
 
     return recordMaxSize;
+}
+
+// accessory function
+RC getColumnStartAndEndPivot(RecordMinLen &addressColumnStartOffset, RecordMinLen &addressColumnEndOffset, int columnIndex, int nullBytes, void *data, const vector<Attribute> &recordDescriptor){
+	RecordMinLen addressPointerOffset = getNullBytesOffset() + nullBytes + columnIndex*sizeof(RecordMinLen);
+	int recordSize = recordDescriptor.size();
+	memcpy( &addressColumnEndOffset, data+addressPointerOffset, sizeof(RecordMinLen) );
+
+	addressColumnStartOffset = getNullBytesOffset() + nullBytes + recordSize*sizeof(RecordMinLen);
+	if(columnIndex != 0)
+	{
+		unsigned addressPrevPointerOffset = getNullBytesOffset() + nullBytes + (columnIndex-1)*sizeof(RecordMinLen);
+		memcpy( &addressColumnStartOffset, data+addressPrevPointerOffset, sizeof(RecordMinLen) );
+	}
+
+	return 0;
 }

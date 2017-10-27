@@ -100,7 +100,6 @@ public:
   RC checkRecord(const RID rid, void *data);
   RC readFullRecord(const RID &rid, void *data);
   RC prepareRecord(void *fetchedData, void *data);
-  RC getColumnStartAndEndPivot(RecordMinLen &addressColumnStartOffset, RecordMinLen &addressColumnEndOffset, int columnIndex, int nullBytes, void *data);
   RC close();
 };
 
@@ -187,4 +186,5 @@ inline unsigned getDirectorySize();
 inline unsigned getNullBytesOffset();
 
 unsigned getRecordSize(const vector<Attribute> &recordDescriptor);
+RC getColumnStartAndEndPivot(RecordMinLen &addressColumnStartOffset, RecordMinLen &addressColumnEndOffset, int columnIndex, int nullBytes, void *data, const vector<Attribute> &recordDescriptor);
 #endif
