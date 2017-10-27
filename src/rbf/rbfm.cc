@@ -786,15 +786,51 @@ RC RecordBasedFileManager::scan(FileHandle &fileHandle,
 	      const vector<string> &attributeNames, // a list of projected attributes
 	      RBFM_ScanIterator &rbfm_ScanIterator){
 
-	unsigned recordSize = recordDescriptor.size();
-	string recordName[recordSize];
+	if( attributeNames.size() == 0 )
+	{
+		return -1;
+	}
 
+	unsigned recordSize = recordDescriptor.size();
+	vector<string> recordName;
+	for( int i=0; i<recordSize;i++ )
+	{
+		recordName.push_back( recordDescriptor[i].name );
+	}
+
+	// check whether attributeNames contain the attribute not in recordDescriptor
+	for( int i=0;i<attributeNames.size(); i++ )
+	{
+		if( find( recordName.begin(), recordName.end(), attributeNames[i] ) == recordName.end() )
+		{
+			return -1;
+		}
+	}
+
+	string columnName;
+	AttrType columnType;
+	AttrLength columnLength;
+
+	for( int i=0;i<recordSize;i++ )
+		{
+			columnName = recordDescriptor[i].name;
+			columnType = recordDescriptor[i].type;
+			columnLength = recordDescriptor[i].length;
+			rbfm_ScanIterator._recordName.push_back( columnName );
+		if( columnName == conditionAttribute )
+		{
+				rbfm_ScanIterator._columnPivot = i;
+				rbfm_ScanIterator._columnType = columnType;
+				break;
+		}
+	}
 	rbfm_ScanIterator._recordDescriptor = recordDescriptor;
 	rbfm_ScanIterator._conditionAttribute = conditionAttribute;
 	rbfm_ScanIterator._compOp = compOp;
 	rbfm_ScanIterator._value = (void*)value;
 	rbfm_ScanIterator._attributeNames = attributeNames;
 	rbfm_ScanIterator._fileHandle = fileHandle;
+
 	return 0;
 }
 
@@ -811,6 +847,9 @@ RBFM_ScanIterator::~RBFM_ScanIterator(){
 	free(_tmpPage);
 }
 
+RC RBFM_ScanIterator::close(){
+	return 0;
+}
 RC RBFM_ScanIterator::getNextRecord(RID &rid, void *data){
 	// check rbfm pointer
 	unsigned pageNum = 0;
@@ -827,7 +866,6 @@ RC RBFM_ScanIterator::getNextRecord(RID &rid, void *data){
 			return -1;
 		}
 	}
-
 
 	RecordMinLen curTotalSlot;
 
@@ -909,13 +947,86 @@ RC RBFM_ScanIterator::getNextRecord(RID &rid, void *data){
 			curSlotId = 0;
 		}
 	}
-
+	bool success = RBFM_EOF;
+	if( !notScan )
+	{
+		_cursor.pageNum = tmpRid.pageNum;
+		_cursor.slotNum = tmpRid.slotNum;
+		rid.pageNum = tmpRid.pageNum;
+		rid.slotNum = tmpRid.slotNum;
+		prepareRecord( tmpData, data );
+		success = 0;
+	}
 	free(tmpData);
-	return 0;
+	return success;
 }
 
+RC RBFM_ScanIterator::prepareRecord(void *fetchedData, void *data){
+	int needColumnSize = _attributeNames.size();
 
+	unsigned recordSize = _recordDescriptor.size();
+	vector<string> recordName;
+	bool success = 0;
 
+	int nullBytes= getActualBytesForNullsIndicator( recordSize );
+	unsigned char* nullIndicator = (unsigned char*) malloc(nullBytes);
+	memcpy( (void*) nullIndicator, (void*) fetchedData + getNullBytesOffset(), nullBytes );
+
+	int selectNullBytes = getActualBytesForNullsIndicator( needColumnSize );
+	unsigned char* selectNullIndicator = (unsigned char*) malloc(selectNullBytes);
+	int base10NullBytes = 0;
+	unsigned newRecordOffset = selectNullBytes;
+
+	for( int i=0; i< needColumnSize;i++ )
+	{
+		auto it = find( _recordName.begin(), _recordName.end(), _attributeNames[i] );
+		if( it==_recordName.end() )
+		{
+			success = -1;
+			break;
+		}
+		auto columnIndex = distance( _recordName.begin(), it );
+		int shiftBit = 8*nullBytes - columnIndex - 1;
+		bool isNull = nullIndicator[0] & ( 1<<shiftBit );
+
+		if( isNull )
+		{
+			base10NullBytes += pow( 2, shiftBit );
+		}
+		else
+		{
+			RecordMinLen addressColumnStartOffset;
+			RecordMinLen addressColumnEndOffset;
+			getColumnStartAndEndPivot( addressColumnStartOffset, addressColumnEndOffset, (int) columnIndex, nullBytes, fetchedData );
+
+			unsigned destColumnSize = addressColumnEndOffset - addressColumnStartOffset;
+			memcpy( data+newRecordOffset, fetchedData + addressColumnStartOffset, destColumnSize );
+			newRecordOffset += destColumnSize;
+		}
+
+	}
+
+	selectNullIndicator[0] = base10NullBytes;
+	memcpy( data, selectNullIndicator, selectNullBytes );
+
+	free(selectNullIndicator);
+	return success;
+}
+
+RC RBFM_ScanIterator::getColumnStartAndEndPivot(RecordMinLen &addressColumnStartOffset, RecordMinLen &addressColumnEndOffset, int columnIndex, int nullBytes, void *data){
+	RecordMinLen addressPointerOffset = getNullBytesOffset() + nullBytes + columnIndex*sizeof(RecordMinLen);
+	int recordSize = _recordDescriptor.size();
+	memcpy( &addressColumnEndOffset, data+addressPointerOffset, sizeof(RecordMinLen) );
+
+	addressColumnStartOffset = getNullBytesOffset() + nullBytes + recordSize*sizeof(RecordMinLen);
+	if(columnIndex != 0)
+	{
+		unsigned addressPrevPointerOffset = getNullBytesOffset() + nullBytes + (columnIndex-1)*sizeof(RecordMinLen);
+		memcpy( &addressColumnStartOffset, data+addressPrevPointerOffset, sizeof(RecordMinLen) );
+	}
+
+	return 0;
+}
 RC RBFM_ScanIterator::checkRecord(const RID rid, void* data) {
 	// readRecord failed
 	if( readFullRecord( rid, data ) != 0 )
@@ -935,9 +1046,6 @@ RC RBFM_ScanIterator::checkRecord(const RID rid, void* data) {
 	memcpy( nullIndicator, data+getNullBytesOffset(), nullBytes );
 	// loop record
 	unsigned int offset = nullBytes;
-	string columnName;
-	AttrType columnType;
-	AttrLength columnLength;
 	unsigned int shiftBit;
 	bool isNull = false;
 
@@ -945,21 +1053,7 @@ RC RBFM_ScanIterator::checkRecord(const RID rid, void* data) {
 	// which one is dest column
 	unsigned columnPivot = 0;
 
-	for( int i=0;i<recordSize;i++ )
-	{
-		columnName = _recordDescriptor[i].name;
-		columnType = _recordDescriptor[i].type;
-		columnLength = _recordDescriptor[i].length;
-
-		shiftBit = 8*nullBytes - i - 1;
-		isNull = nullIndicator[0] & ( 1 << shiftBit );
-		if( columnName == _conditionAttribute )
-		{
-			columnPivot = i;
-			break;
-		}
-	}
-	shiftBit = 8*nullBytes - columnPivot - 1;
+	shiftBit = 8*nullBytes - _columnPivot - 1;
 	isNull = nullIndicator[0] & ( 1 << shiftBit );
 	RC success = -1;
 
@@ -987,16 +1081,10 @@ RC RBFM_ScanIterator::checkRecord(const RID rid, void* data) {
 	// not NULL case
 	void *destColumnData;
 
-	RecordMinLen addressPointerOffset = getNullBytesOffset() + nullBytes + columnPivot*sizeof(RecordMinLen);
+	RecordMinLen addressColumnStartOffset;
 	RecordMinLen addressColumnEndOffset;
-	memcpy( &addressColumnEndOffset, data+addressPointerOffset, sizeof(RecordMinLen) );
 
-	RecordMinLen addressColumnStartOffset = getNullBytesOffset() + nullBytes +recordSize*sizeof(RecordMinLen);
-	if(columnPivot != 0)
-	{
-		unsigned addressPrevPointerOffset = getNullBytesOffset() + nullBytes + (columnPivot-1)*sizeof(RecordMinLen);
-		memcpy( &addressColumnStartOffset, data+addressPrevPointerOffset, sizeof(RecordMinLen) );
-	}
+	getColumnStartAndEndPivot( addressColumnStartOffset, addressColumnEndOffset, (int) columnPivot, nullBytes, data );
 	unsigned destColumnSize = addressColumnEndOffset - addressColumnStartOffset;
 
 	// copy destColumnData
@@ -1008,7 +1096,7 @@ RC RBFM_ScanIterator::checkRecord(const RID rid, void* data) {
 	int destLen;
 	void *compColumn;
 	void *destColumn;
-	if( columnType == TypeVarChar )
+	if( _columnType == TypeVarChar )
 	{
 		memcpy( &compLen, _value, sizeof(int) );
 		memcpy( &destLen, destColumnData, sizeof(int) );
@@ -1020,7 +1108,7 @@ RC RBFM_ScanIterator::checkRecord(const RID rid, void* data) {
 	}
 	else
 	{
-		int allocateSize = columnType == TypeInt ? sizeof(int) : sizeof(float);
+		int allocateSize = _columnType == TypeInt ? sizeof(int) : sizeof(float);
 
 		compLen = allocateSize;
 		destLen = allocateSize;
@@ -1051,7 +1139,7 @@ RC RBFM_ScanIterator::checkRecord(const RID rid, void* data) {
 		}
 		case LT_OP:
 		{
-			if( columnType == TypeVarChar )
+			if( _columnType == TypeVarChar )
 			{
 				if ( strcmp( (char*)destColumn, (char*)compColumn ) < 0 )
 				{
@@ -1061,7 +1149,7 @@ RC RBFM_ScanIterator::checkRecord(const RID rid, void* data) {
 			}
 			else
 			{
-				if( columnType == TypeInt )
+				if( _columnType == TypeInt )
 				{
 					compBool = ( (int*)destColumn < (int*)compColumn );
 				}
@@ -1079,7 +1167,7 @@ RC RBFM_ScanIterator::checkRecord(const RID rid, void* data) {
 		}
 		case LE_OP:
 		{
-			if( columnType == TypeVarChar )
+			if( _columnType == TypeVarChar )
 			{
 				if ( strcmp( (char*)destColumn, (char*)compColumn ) <= 0 )
 				{
@@ -1089,7 +1177,7 @@ RC RBFM_ScanIterator::checkRecord(const RID rid, void* data) {
 			}
 			else
 			{
-				if( columnType == TypeInt )
+				if( _columnType == TypeInt )
 				{
 					compBool = ( (int*)destColumn <= (int*)compColumn );
 				}
@@ -1107,7 +1195,7 @@ RC RBFM_ScanIterator::checkRecord(const RID rid, void* data) {
 		}
 		case GT_OP:
 		{
-			if( columnType == TypeVarChar )
+			if( _columnType == TypeVarChar )
 			{
 				if ( strcmp( (char*)destColumn, (char*)compColumn ) > 0 )
 				{
@@ -1117,7 +1205,7 @@ RC RBFM_ScanIterator::checkRecord(const RID rid, void* data) {
 			}
 			else
 			{
-				if( columnType == TypeInt )
+				if( _columnType == TypeInt )
 				{
 					compBool = ( (int*)destColumn > (int*)compColumn );
 				}
@@ -1135,7 +1223,7 @@ RC RBFM_ScanIterator::checkRecord(const RID rid, void* data) {
 		}
 		case GE_OP:
 		{
-			if( columnType == TypeVarChar )
+			if( _columnType == TypeVarChar )
 			{
 				if ( strcmp( (char*)destColumn, (char*)compColumn ) >= 0 )
 				{
@@ -1145,7 +1233,7 @@ RC RBFM_ScanIterator::checkRecord(const RID rid, void* data) {
 			}
 			else
 			{
-				if( columnType == TypeInt )
+				if( _columnType == TypeInt )
 				{
 					compBool = ( (int*)destColumn >= (int*)compColumn );
 				}
@@ -1163,7 +1251,7 @@ RC RBFM_ScanIterator::checkRecord(const RID rid, void* data) {
 		}
 		case NE_OP:
 		{
-			if( columnType == TypeVarChar )
+			if( _columnType == TypeVarChar )
 			{
 				if( compLen != destLen )
 				{
@@ -1178,7 +1266,7 @@ RC RBFM_ScanIterator::checkRecord(const RID rid, void* data) {
 			}
 			else
 			{
-				if( columnType == TypeInt )
+				if( _columnType == TypeInt )
 				{
 					compBool = ( (int*)destColumn != (int*)compColumn );
 				}

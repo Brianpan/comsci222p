@@ -6,6 +6,7 @@
 #include <climits>
 #include <cstring>
 #include <math.h>
+#include <algorithm>
 
 #include "../rbf/pfm.h"
 
@@ -84,6 +85,12 @@ public:
   vector<string> _attributeNames;
   void* _value;
   void* _tmpPage;
+  // for comp column
+  int _columnPivot;
+  AttrType _columnType;
+
+  vector<string> _recordName;
+
   FileHandle _fileHandle;
 
   // Never keep the results in the memory. When getNextRecord() is called, 
@@ -92,7 +99,9 @@ public:
   RC getNextRecord(RID &rid, void *data);
   RC checkRecord(const RID rid, void *data);
   RC readFullRecord(const RID &rid, void *data);
-  RC close() { return -1; };
+  RC prepareRecord(void *fetchedData, void *data);
+  RC getColumnStartAndEndPivot(RecordMinLen &addressColumnStartOffset, RecordMinLen &addressColumnEndOffset, int columnIndex, int nullBytes, void *data);
+  RC close();
 };
 
 
