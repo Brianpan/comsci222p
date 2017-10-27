@@ -415,7 +415,8 @@ RC RecordBasedFileManager::prepareRecord( const vector<Attribute> &recordDescrip
 		AttrLength columnLength =recordDescriptor[i].length;
 
 		int shiftBit = 8*nullBytes - i - 1;
-		bool isNull = nullIndicator[0] & ( 1<< shiftBit );
+		int nullIndex = nullBytes - (int)(shiftBit/8) - 1;
+		bool isNull = nullIndicator[nullIndex] & ( 1<< (shiftBit%8) );
 		// NULL case
 		if( isNull )
 		{
@@ -429,15 +430,15 @@ RC RecordBasedFileManager::prepareRecord( const vector<Attribute> &recordDescrip
 			case TypeVarChar:
 			{
 				int charCount;
-				memcpy( (void*)&charCount, (char*) data + dataOffset, sizeof(int) );
+				memcpy( &charCount, data + dataOffset, sizeof(int) );
 				// varchar over length
-//				if( charCount > columnLength )
-//				{
-//					free(recordAddrPointer);
-//					free(nullIndicator);
-//					return -1;
-//					charCount = columnLength;
-//				}
+				// if( charCount > columnLength )
+				// {
+				// 	free(recordAddrPointer);
+				// 	free(nullIndicator);
+				// 	return -1;
+				// 	charCount = columnLength;
+				// }
 				RecordMinLen varcharRecordSize = charCount*sizeof(char) + sizeof(int);
 				recordOffset += varcharRecordSize;
 				recordActualSize += varcharRecordSize;
@@ -987,7 +988,8 @@ RC RBFM_ScanIterator::prepareRecord(void *fetchedData, void *data){
 		}
 		auto columnIndex = distance( _recordName.begin(), it );
 		int shiftBit = 8*nullBytes - columnIndex - 1;
-		bool isNull = nullIndicator[0] & ( 1<<shiftBit );
+		int nullIndex = nullBytes - (int)(shiftBit/8) - 1;
+		bool isNull = nullIndicator[nullIndex] & ( 1<<(shiftBit%8) );
 
 		if( isNull )
 		{
@@ -1044,8 +1046,8 @@ RC RBFM_ScanIterator::checkRecord(const RID rid, void* data) {
 	int nullBytes = getActualBytesForNullsIndicator( recordSize );
 	unsigned char* nullIndicator = (unsigned char*) malloc(nullBytes);
 	memcpy( nullIndicator, data+getNullBytesOffset(), nullBytes );
-	// loop record
-	unsigned int offset = nullBytes;
+
+
 	unsigned int shiftBit;
 	bool isNull = false;
 
@@ -1054,7 +1056,9 @@ RC RBFM_ScanIterator::checkRecord(const RID rid, void* data) {
 	unsigned columnPivot = 0;
 
 	shiftBit = 8*nullBytes - _columnPivot - 1;
-	isNull = nullIndicator[0] & ( 1 << shiftBit );
+	// select specific nullIndicator
+	int nullIndex = nullBytes - (int)(shiftBit/8) - 1;
+	isNull = nullIndicator[nullIndex] & ( 1 << shiftBit );
 	RC success = -1;
 
 	if( isNull )
