@@ -1,0 +1,13 @@
+src/rm/rmtest_12.o: ../src/rm/rmtest_12.cc ../src/rm/rm_test_util.h \
+  ../src/rm/rm.h ../src/rm/../rbf/rbfm.h ../src/rm/../rbf/../rbf/pfm.h \
+  ../src/rm/../rbf/test_util.h
+
+../src/rm/rm_test_util.h:
+
+../src/rm/rm.h:
+
+../src/rm/../rbf/rbfm.h:
+
+../src/rm/../rbf/../rbf/pfm.h:
+
+../src/rm/../rbf/test_util.h:
