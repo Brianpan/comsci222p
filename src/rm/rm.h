@@ -14,14 +14,17 @@ using namespace std;
 // RM_ScanIterator is an iteratr to go through tuples
 class RM_ScanIterator {
 private:
-	RID cursor;
+	RID _cursor;
+	FileHandle _fileHandle;
 public:
   RM_ScanIterator() {};
   ~RM_ScanIterator() {};
 
+  RBFM_ScanIterator _rbf_scanIter;
+
   // "data" follows the same format as RelationManager::insertTuple()
   RC getNextTuple(RID &rid, void *data) { return RM_EOF; };
-  RC close() { return -1; };
+  RC close();
 };
 
 
@@ -75,7 +78,8 @@ protected:
   RelationManager();
   ~RelationManager();
 private:
-  FileHandle fileHandle;
+  FileHandle _fileHandle;
+  RecordBasedFileManager *_rbf_manager;
 };
 
 #endif

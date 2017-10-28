@@ -9,6 +9,7 @@ RelationManager* RelationManager::instance()
 
 RelationManager::RelationManager()
 {
+	_rbf_manager = RecordBasedFileManager::instance();
 	// create table of table
 	// create table of attribute
 }
@@ -62,27 +63,37 @@ RC RelationManager::readTuple(const string &tableName, const RID &rid, void *dat
 	vector<Attribute> recordDescriptor;
 	getAttributes( tableName, recordDescriptor );
 
-	RecordBasedFileManager* rbf_manager = RecordBasedFileManager::instance();
 	FileHandle fileHandle;
-	if ( rbf_manager->openFile( tableName, fileHandle ) != 0 )
+	if ( _rbf_manager->openFile( tableName, fileHandle ) != 0 )
 		return -1;
 
-	if ( rbf_manager->readRecord( fileHandle, recordDescriptor, rid, data ) != 0 )
+	if ( _rbf_manager->readRecord( fileHandle, recordDescriptor, rid, data ) != 0 )
 		return -1;
+
+	_rbf_manager->closeFile(fileHandle);
 	return 0;
 }
 
 RC RelationManager::printTuple(const vector<Attribute> &attrs, const void *data)
 {
-	RecordBasedFileManager rbf;
-	if( rbf.printRecord( attrs, data ) != 0 )
-		return -1;
-	return 0;
+	return _rbf_manager->printRecord( attrs, data );
 }
 
 RC RelationManager::readAttribute(const string &tableName, const RID &rid, const string &attributeName, void *data)
 {
-    return -1;
+	// prepare recordDescriptor
+	vector<Attribute> recordDescriptor;
+	if( getAttributes( tableName, recordDescriptor ) != 0)
+		return -1;
+
+	FileHandle fileHandle;
+
+	if( _rbf_manager->readAttribute( fileHandle, recordDescriptor, rid, attributeName, data ) == 0 )
+	{
+		_rbf_manager->closeFile(fileHandle);
+		return 0;
+	}
+	return -1;
 }
 
 RC RelationManager::scan(const string &tableName,
@@ -92,20 +103,25 @@ RC RelationManager::scan(const string &tableName,
       const vector<string> &attributeNames,
       RM_ScanIterator &rm_ScanIterator)
 {
-	RecordBasedFileManager* rbf_manager = RecordBasedFileManager::instance();
+	RecordBasedFileManager*_rbf_manager = RecordBasedFileManager::instance();
 	FileHandle fileHandle;
-	if ( rbf_manager->openFile( tableName, fileHandle ) != 0 )
+	if ( _rbf_manager->openFile( tableName, fileHandle ) != 0 )
 		return -1;
 	// prepare recordDescriptor
 	vector<Attribute> recordDescriptor;
-	getAttributes( tableName, recordDescriptor );
-	// run record scan
-	rbf_manager->scan( fileHandle, recordDescriptor, conditionAttribute, compOp, value, attributeNames, rm_ScanIterator );
-
-	if( rbf_manager->closeFile(fileHandle) != 0 )
+	if( getAttributes( tableName, recordDescriptor ) != 0)
 		return -1;
 
-	return 0;
+	// set up rm_ScanIterator
+	rm_ScanIterator._fileHandle = fileHandle;
+	rm_ScanIterator._rbf_scanIter._fileHandlePtr = &rm_ScanIterator._fileHandle;
+
+	// run record scan
+	return _rbf_manager->scan( rm_ScanIterator._fileHandle, recordDescriptor, conditionAttribute, compOp, value, attributeNames, rm_ScanIterator._rbf_scanIter );
+}
+// RM ScanIterator
+RC RM_ScanIterator::close(){
+	_rbf_scanIter.close();
 }
 
 // Extra credit work
