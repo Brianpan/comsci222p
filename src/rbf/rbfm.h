@@ -91,7 +91,7 @@ public:
 
   vector<string> _recordName;
 
-  FileHandle _fileHandle;
+  FileHandle* _fileHandlePtr;
 
   // Never keep the results in the memory. When getNextRecord() is called, 
   // a satisfying record needs to be fetched from the file.

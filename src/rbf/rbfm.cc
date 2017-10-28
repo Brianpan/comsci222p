@@ -823,7 +823,7 @@ RC RecordBasedFileManager::scan(FileHandle &fileHandle,
 	rbfm_ScanIterator._compOp = compOp;
 	rbfm_ScanIterator._value = (void*)value;
 	rbfm_ScanIterator._attributeNames = attributeNames;
-	rbfm_ScanIterator._fileHandle = fileHandle;
+	rbfm_ScanIterator._fileHandlePtr = &fileHandle;
 
 	// init load first tmpPage
 	if ( fileHandle.readPage( 0, rbfm_ScanIterator._tmpPage ) != 0)
@@ -958,14 +958,14 @@ RC RBFM_ScanIterator::getNextRecord(RID &rid, void *data){
 	// check rbfm pointer
 	unsigned pageNum = 0;
 	unsigned slotNum = 0;
-	int maxPage = _fileHandle.getNumberOfPages() - 1;
+	int maxPage = _fileHandlePtr->getNumberOfPages() - 1;
 
 	if( !_isFirstIter )
 	{
 		pageNum = _cursor.pageNum;
 		slotNum = _cursor.slotNum + 1;
 
-		if( (unsigned)pageNum > (unsigned)maxPage || _fileHandle.readPage(pageNum, _tmpPage) != 0 )
+		if( (unsigned)pageNum > (unsigned)maxPage || _fileHandlePtr->readPage(pageNum, _tmpPage) != 0 )
 		{
 			return -1;
 		}
@@ -987,7 +987,7 @@ RC RBFM_ScanIterator::getNextRecord(RID &rid, void *data){
 		{
 			pageNum += 1;
 			slotNum = 0;
-			if( _fileHandle.readPage(pageNum, _tmpPage) != 0 )
+			if( _fileHandlePtr->readPage(pageNum, _tmpPage) != 0 )
 			{
 				return -1;
 			}
@@ -1011,12 +1011,12 @@ RC RBFM_ScanIterator::getNextRecord(RID &rid, void *data){
 		// read new page
 		if( curPageId != pageNum )
 		{
-			_fileHandle.readPage(curPageId, _tmpPage);
+			_fileHandlePtr->readPage(curPageId, _tmpPage);
 			memcpy( &curTotalSlot, (char*)_tmpPage + getSlotCountOffset(), sizeof(RecordMinLen) );
 			while( curTotalSlot == 0 && (unsigned)curPageId < (unsigned)maxPage )
 			{
 				curPageId += 1;
-				_fileHandle.readPage(curPageId, _tmpPage);
+				_fileHandlePtr->readPage(curPageId, _tmpPage);
 				memcpy( &curTotalSlot, (char*)_tmpPage + getSlotCountOffset(), sizeof(RecordMinLen) );
 			}
 			// in the maxpage still has nothing to read
@@ -1394,7 +1394,7 @@ RC RBFM_ScanIterator::readFullRecord(const RID &rid, void *data) {
     int recordSize = _recordDescriptor.size();
     // read page first
     void* tmpPage = malloc(PAGE_SIZE);
-    if( _fileHandle.readPage(pageNum, tmpPage) == -1 )
+    if( _fileHandlePtr->readPage(pageNum, tmpPage) == -1 )
     {
     	return  -1;
     }
@@ -1417,7 +1417,7 @@ RC RBFM_ScanIterator::readFullRecord(const RID &rid, void *data) {
     	
     	if( tmpRid.pageNum != pageNum )
     	{
-    		if( _fileHandle.readPage(pageNum, tmpPage) == -1 )
+    		if( _fileHandlePtr->readPage(pageNum, tmpPage) == -1 )
     		{
     	    	free(tmpPage);
     			return -1;

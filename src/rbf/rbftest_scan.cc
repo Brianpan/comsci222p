@@ -13,7 +13,7 @@
 
 using namespace std;
 
-int RBFTest_8b(RecordBasedFileManager *rbfm) {
+int RBFTest_scan(RecordBasedFileManager *rbfm) {
     // Functions tested
     // 1. Create Record-Based File
     // 2. Open Record-Based File
@@ -126,6 +126,6 @@ int main()
      
     remove("test_scan");
        
-    RC rcmain = RBFTest_8b(rbfm);
+    RC rcmain = RBFTest_scan(rbfm);
     return rcmain;
 }
