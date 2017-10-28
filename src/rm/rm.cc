@@ -45,23 +45,60 @@ RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &at
 
 RC RelationManager::insertTuple(const string &tableName, const void *data, RID &rid)
 {
-    return -1;
+	vector<Attribute> recordDescriptor;
+	if( getAttributes( tableName, recordDescriptor ) != 0 )
+		return -1;
+
+	FileHandle fileHandle;
+
+	if( _rbf_manager->insertRecord( fileHandle, recordDescriptor, data, rid ) == 0 )
+	{
+		_rbf_manager->closeFile(fileHandle);
+		return 0;
+	}
+
+	return -1;
 }
 
 RC RelationManager::deleteTuple(const string &tableName, const RID &rid)
 {
-    return -1;
+	vector<Attribute> recordDescriptor;
+	if( getAttributes( tableName, recordDescriptor ) != 0 )
+		return -1;
+
+	FileHandle fileHandle;
+
+	if( _rbf_manager->deleteRecord( fileHandle, recordDescriptor, rid ) == 0 )
+	{
+		_rbf_manager->closeFile(fileHandle);
+		return 0;
+	}
+
+	return -1;
 }
 
 RC RelationManager::updateTuple(const string &tableName, const void *data, const RID &rid)
 {
-    return -1;
+	vector<Attribute> recordDescriptor;
+	if( getAttributes( tableName, recordDescriptor ) != 0 )
+		return -1;
+
+	FileHandle fileHandle;
+
+	if( _rbf_manager->updateRecord( fileHandle, recordDescriptor, data, rid ) == 0 )
+	{
+		_rbf_manager->closeFile(fileHandle);
+		return 0;
+	}
+
+	return -1;
 }
 
 RC RelationManager::readTuple(const string &tableName, const RID &rid, void *data)
 {
 	vector<Attribute> recordDescriptor;
-	getAttributes( tableName, recordDescriptor );
+	if( getAttributes( tableName, recordDescriptor ) != 0 )
+		return -1;
 
 	FileHandle fileHandle;
 	if ( _rbf_manager->openFile( tableName, fileHandle ) != 0 )
@@ -87,6 +124,9 @@ RC RelationManager::readAttribute(const string &tableName, const RID &rid, const
 		return -1;
 
 	FileHandle fileHandle;
+
+	if ( _rbf_manager->openFile( tableName, fileHandle ) != 0 )
+			return -1;
 
 	if( _rbf_manager->readAttribute( fileHandle, recordDescriptor, rid, attributeName, data ) == 0 )
 	{
@@ -120,8 +160,12 @@ RC RelationManager::scan(const string &tableName,
 	return _rbf_manager->scan( rm_ScanIterator._fileHandle, recordDescriptor, conditionAttribute, compOp, value, attributeNames, rm_ScanIterator._rbf_scanIter );
 }
 // RM ScanIterator
+RC RM_ScanIterator::getNextTuple(RID &rid, void *data){
+	return _rbf_scanIter.getNextRecord(rid, data);
+}
+
 RC RM_ScanIterator::close(){
-	_rbf_scanIter.close();
+	return _rbf_scanIter.close();
 }
 
 // Extra credit work

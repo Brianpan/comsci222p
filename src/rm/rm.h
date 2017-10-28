@@ -23,7 +23,7 @@ public:
   RBFM_ScanIterator _rbf_scanIter;
 
   // "data" follows the same format as RelationManager::insertTuple()
-  RC getNextTuple(RID &rid, void *data) { return RM_EOF; };
+  RC getNextTuple(RID &rid, void *data);
   RC close();
 };
 
