@@ -39,11 +39,13 @@ typedef enum { TypeInt = 0, TypeReal, TypeVarChar } AttrType;
 
 
 typedef unsigned AttrLength;
+typedef unsigned AttrPosition;
 
 struct Attribute {
     string   name;     // attribute name
     AttrType type;     // attribute type
     AttrLength length; // attribute length
+    AttrPosition position;
 };
 
 // Comparison Operator (NOT needed for part 1 of the project)
@@ -91,7 +93,7 @@ public:
 
   vector<string> _recordName;
 
-  FileHandle _fileHandle;
+  FileHandle* _fileHandlePtr;
 
   // Never keep the results in the memory. When getNextRecord() is called, 
   // a satisfying record needs to be fetched from the file.
