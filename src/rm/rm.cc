@@ -46,7 +46,7 @@ RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &at
 RC RelationManager::insertTuple(const string &tableName, const void *data, RID &rid)
 {
 	vector<Attribute> recordDescriptor;
-	if( getAttributes( tableName, recordDescriptor ) != 0 )
+	if( getTableAttributes( tableName, recordDescriptor ) != 0 )
 		return -1;
 
 	FileHandle fileHandle;
@@ -63,7 +63,7 @@ RC RelationManager::insertTuple(const string &tableName, const void *data, RID &
 RC RelationManager::deleteTuple(const string &tableName, const RID &rid)
 {
 	vector<Attribute> recordDescriptor;
-	if( getAttributes( tableName, recordDescriptor ) != 0 )
+	if( getTableAttributes( tableName, recordDescriptor ) != 0 )
 		return -1;
 
 	FileHandle fileHandle;
@@ -80,7 +80,7 @@ RC RelationManager::deleteTuple(const string &tableName, const RID &rid)
 RC RelationManager::updateTuple(const string &tableName, const void *data, const RID &rid)
 {
 	vector<Attribute> recordDescriptor;
-	if( getAttributes( tableName, recordDescriptor ) != 0 )
+	if( getTableAttributes( tableName, recordDescriptor ) != 0 )
 		return -1;
 
 	FileHandle fileHandle;
@@ -97,7 +97,7 @@ RC RelationManager::updateTuple(const string &tableName, const void *data, const
 RC RelationManager::readTuple(const string &tableName, const RID &rid, void *data)
 {
 	vector<Attribute> recordDescriptor;
-	if( getAttributes( tableName, recordDescriptor ) != 0 )
+	if( getTableAttributes( tableName, recordDescriptor ) != 0 )
 		return -1;
 
 	FileHandle fileHandle;
@@ -120,7 +120,7 @@ RC RelationManager::readAttribute(const string &tableName, const RID &rid, const
 {
 	// prepare recordDescriptor
 	vector<Attribute> recordDescriptor;
-	if( getAttributes( tableName, recordDescriptor ) != 0)
+	if( getTableAttributes( tableName, recordDescriptor ) != 0)
 		return -1;
 
 	FileHandle fileHandle;
@@ -159,6 +159,83 @@ RC RelationManager::scan(const string &tableName,
 	// run record scan
 	return _rbf_manager->scan( rm_ScanIterator._fileHandle, recordDescriptor, conditionAttribute, compOp, value, attributeNames, rm_ScanIterator._rbf_scanIter );
 }
+
+RC RelationManager::getTableAttributes(const string &tableName, vector<Attribute> &attrs){
+    Attribute attr;
+
+    if( tableName == "Tables" )
+    {
+        attr.name="table-id";
+        attr.type=TypeInt;
+        attr.length=sizeof(int);
+        attr.position=1;
+        attrs.push_back(attr);
+
+        attr.name="table-name";
+        attr.type=TypeVarChar;
+        attr.length=VarChar;
+        attr.position=2;
+        attrs.push_back(attr);
+
+        attr.name="file-name";
+        attr.type=TypeVarChar;
+        attr.length=VarChar;
+        attr.position=3;
+        attrs.push_back(attr);
+
+        attr.name="SystemTable";
+        attr.type=TypeInt;
+        attr.length=sizeof(int);
+        attr.position=4;
+        attrs.push_back(attr);
+
+        return 0;
+    }
+    else if( tableName == "Columns" )
+    {
+        attr.name="table-id";
+        attr.type=TypeInt;
+        attr.length=sizeof(int);
+        attr.position=1;
+        attrs.push_back(attr);
+
+        attr.name="column-name";
+        attr.type=TypeVarChar;
+        attr.length=VarChar;
+        attr.position=2;
+        attrs.push_back(attr);
+
+        attr.name="column-type";
+        attr.type=TypeInt;
+        attr.length=sizeof(int);
+        attr.position=3;
+        attrs.push_back(attr);
+
+        attr.name="column-length";
+        attr.type=TypeInt;
+        attr.length=sizeof(int);
+        attr.position=4;
+        attrs.push_back(attr);
+
+        attr.name="column-position";
+        attr.type=TypeInt;
+        attr.length=sizeof(int);
+        attr.position=5;
+        attrs.push_back(attr);
+
+
+        attr.name="NullFlag";
+        attr.type=TypeInt;
+        attr.length=sizeof(int);
+        attr.position=6;
+        attrs.push_back(attr);
+
+        return 0;
+    }
+
+    return getAttributes(tableName, attrs);
+}
+
 // RM ScanIterator
 RC RM_ScanIterator::getNextTuple(RID &rid, void *data){
 	return _rbf_scanIter.getNextRecord(rid, data);

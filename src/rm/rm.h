@@ -42,6 +42,8 @@ public:
   RC deleteTable(const string &tableName);
 
   RC getAttributes(const string &tableName, vector<Attribute> &attrs);
+  // get table attribute if is Tables & Columns do not call getAttributes
+  RC getTableAttributes(const string &tableName, vector<Attribute> &attrs);
 
   RC insertTuple(const string &tableName, const void *data, RID &rid);
 
@@ -72,7 +74,6 @@ public:
   RC addAttribute(const string &tableName, const Attribute &attr);
 
   RC dropAttribute(const string &tableName, const string &attributeName);
-
 
 protected:
   RelationManager();
