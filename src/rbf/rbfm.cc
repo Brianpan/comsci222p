@@ -210,8 +210,8 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
 		}
 
 		// update value back
-		memcpy( (char*)tmpPage + getRestSizeOffset(), (char*) &restSize, sizeof(RecordMinLen) );
-		memcpy( (char*)tmpPage + getSlotCountOffset(), (char*) &slotSize, sizeof(RecordMinLen) );
+		memcpy( (char*)tmpPage + getRestSizeOffset(), &restSize, sizeof(RecordMinLen) );
+		memcpy( (char*)tmpPage + getSlotCountOffset(), &slotSize, sizeof(RecordMinLen) );
 
 		// write to page
 		fileHandle.writePage(pageNum, tmpPage);
@@ -403,7 +403,7 @@ RC RecordBasedFileManager::prepareRecord( const vector<Attribute> &recordDescrip
 	memset( recordAddrPointer, 0, recordAddrPointerSize );
 
 	// offset of record before insert (column count + recordAddrPointer + nullIndicator)
-	RecordMinLen recordOffset = sizeof(RecordMinLen)*( 1+recordAddrPointerSize ) + nullBytes;
+	RecordMinLen recordOffset = sizeof(RecordMinLen) + recordAddrPointerSize + nullBytes;
 	// used for fetching data
 	unsigned int dataOffset = nullBytes;
 	// the data of record size
@@ -442,32 +442,27 @@ RC RecordBasedFileManager::prepareRecord( const vector<Attribute> &recordDescrip
 				RecordMinLen varcharRecordSize = charCount*sizeof(char) + sizeof(int);
 				recordOffset += varcharRecordSize;
 				recordActualSize += varcharRecordSize;
-				// set recordAddrPointer
-				// each time shift sizeof(RecordMinLen)
-				memcpy( (char*)recordAddrPointer + i*sizeof(RecordMinLen), (char*) &recordOffset, sizeof(RecordMinLen) );
-
 				dataOffset += varcharRecordSize;
 				break;
 			}
 			case TypeInt:
 			{
-				recordOffset += sizeof(int);
-				recordActualSize += sizeof(int);
-
-				memcpy( (char*)recordAddrPointer + i*sizeof(RecordMinLen), (char*) &recordOffset, sizeof(RecordMinLen) );
-				dataOffset += sizeof(int);
+				recordOffset += columnLength;
+				recordActualSize += columnLength;
+				dataOffset += columnLength;
 				break;
 			}
 			case TypeReal:
 			{
-				recordOffset += sizeof(float);
-				recordActualSize += sizeof(float);
-
-				memcpy( (char*) recordAddrPointer + i*sizeof(RecordMinLen), (char*) &recordOffset, sizeof(RecordMinLen) );
-				dataOffset += sizeof(float);
+				recordOffset += columnLength;
+				recordActualSize += columnLength;
+				dataOffset += columnLength;
 				break;
 			}
 		}
+		// each time shift sizeof(RecordMinLen)
+		// set recordAddrPointer
+		memcpy( (char*)recordAddrPointer + i*sizeof(RecordMinLen), &recordOffset, sizeof(RecordMinLen) );
 	}
 	// memcpy data to recordData
 	// copy data to recordData
@@ -793,16 +788,15 @@ RC RecordBasedFileManager::scan(FileHandle &fileHandle,
 	}
 
 	unsigned recordSize = recordDescriptor.size();
-	vector<string> recordName;
 	for( int i=0; i<recordSize;i++ )
 	{
-		recordName.push_back( recordDescriptor[i].name );
+		rbfm_ScanIterator._recordName.push_back( recordDescriptor[i].name );
 	}
 
 	// check whether attributeNames contain the attribute not in recordDescriptor
 	for( int i=0;i<attributeNames.size(); i++ )
 	{
-		if( find( recordName.begin(), recordName.end(), attributeNames[i] ) == recordName.end() )
+		if( find( rbfm_ScanIterator._recordName.begin(), rbfm_ScanIterator._recordName.end(), attributeNames[i] ) == rbfm_ScanIterator._recordName.end() )
 		{
 			return -1;
 		}
@@ -817,7 +811,6 @@ RC RecordBasedFileManager::scan(FileHandle &fileHandle,
 			columnName = recordDescriptor[i].name;
 			columnType = recordDescriptor[i].type;
 			columnLength = recordDescriptor[i].length;
-			rbfm_ScanIterator._recordName.push_back( columnName );
 		if( columnName == conditionAttribute )
 		{
 				rbfm_ScanIterator._columnPivot = i;
@@ -832,6 +825,9 @@ RC RecordBasedFileManager::scan(FileHandle &fileHandle,
 	rbfm_ScanIterator._attributeNames = attributeNames;
 	rbfm_ScanIterator._fileHandle = fileHandle;
 
+	// init load first tmpPage
+	if ( fileHandle.readPage( 0, rbfm_ScanIterator._tmpPage ) != 0)
+		return -1;
 	return 0;
 }
 
@@ -976,7 +972,7 @@ RC RBFM_ScanIterator::getNextRecord(RID &rid, void *data){
 	}
 
 	RecordMinLen curTotalSlot;
-
+	RecordMinLen restSize;
 	memcpy( &curTotalSlot, (char*)_tmpPage + getSlotCountOffset(), sizeof(RecordMinLen) );
 
 	if( (unsigned)slotNum >= (unsigned)curTotalSlot )
@@ -986,7 +982,7 @@ RC RBFM_ScanIterator::getNextRecord(RID &rid, void *data){
 		{
 			return -1;
 		}
-		// treverse next page
+		// traverse next page
 		else
 		{
 			pageNum += 1;
@@ -1035,7 +1031,7 @@ RC RBFM_ScanIterator::getNextRecord(RID &rid, void *data){
 		tmpRid.slotNum = curSlotId;
 		memcpy(&tmpSlot, (char*)_tmpPage+getSlotOffset(curSlotId), sizeof(DIRECTORYSLOT) );
 		SlotType slotType = tmpSlot.slotType;
-		// treverse only when the slotType is Normal or MasterPointer
+		// traverse only when the slotType is Normal or MasterPointer
 		if( slotType == Normal || slotType == MasterPointer )
 		{
 			if( checkRecord(tmpRid, tmpData) == 0 )
@@ -1060,6 +1056,7 @@ RC RBFM_ScanIterator::getNextRecord(RID &rid, void *data){
 	{
 		_cursor.pageNum = tmpRid.pageNum;
 		_cursor.slotNum = tmpRid.slotNum;
+		_isFirstIter = false;
 		rid.pageNum = tmpRid.pageNum;
 		rid.slotNum = tmpRid.slotNum;
 		prepareRecord( tmpData, data );
@@ -1182,7 +1179,7 @@ RC RBFM_ScanIterator::checkRecord(const RID rid, void* data) {
 	RecordMinLen addressColumnStartOffset;
 	RecordMinLen addressColumnEndOffset;
 
-	getColumnStartAndEndPivot( addressColumnStartOffset, addressColumnEndOffset, (int) columnPivot, nullBytes, data, _recordDescriptor );
+	getColumnStartAndEndPivot( addressColumnStartOffset, addressColumnEndOffset, (int) _columnPivot, nullBytes, data, _recordDescriptor );
 	unsigned destColumnSize = addressColumnEndOffset - addressColumnStartOffset;
 
 	// copy destColumnData
@@ -1417,13 +1414,19 @@ RC RBFM_ScanIterator::readFullRecord(const RID &rid, void *data) {
     while( slotType == MasterPointer || slotType == SlavePointer )
     {
     	memcpy( &tmpRid, (char*)tmpPage + slot.pageOffset, sizeof(RID) );
-    	pageNum = tmpRid.pageNum;
-    	slotNum = tmpRid.slotNum;
-    	if( _fileHandle.readPage(pageNum, tmpPage) == -1 )
+    	
+    	if( tmpRid.pageNum != pageNum )
     	{
-    	    free(tmpPage);
-    		return -1;
+    		if( _fileHandle.readPage(pageNum, tmpPage) == -1 )
+    		{
+    	    	free(tmpPage);
+    			return -1;
+    		}
+    		pageNum = tmpRid.pageNum;
     	}
+    	
+    	slotNum = tmpRid.slotNum;
+
     	memcpy( (void*) &slot, (char*)tmpPage + getSlotOffset(slotNum), sizeof(DIRECTORYSLOT) );
     	pageOffset = slot.pageOffset;
     	tmpSize = slot.recordSize;
@@ -1475,13 +1478,11 @@ RC getColumnStartAndEndPivot(RecordMinLen &addressColumnStartOffset, RecordMinLe
 	RecordMinLen addressPointerOffset = getNullBytesOffset() + nullBytes + columnIndex*sizeof(RecordMinLen);
 	int recordSize = recordDescriptor.size();
 	memcpy( &addressColumnEndOffset, (char*)data+addressPointerOffset, sizeof(RecordMinLen) );
-
 	addressColumnStartOffset = getNullBytesOffset() + nullBytes + recordSize*sizeof(RecordMinLen);
 	if(columnIndex != 0)
 	{
 		unsigned addressPrevPointerOffset = getNullBytesOffset() + nullBytes + (columnIndex-1)*sizeof(RecordMinLen);
 		memcpy( &addressColumnStartOffset, (char*)data+addressPrevPointerOffset, sizeof(RecordMinLen) );
 	}
-
 	return 0;
 }
