@@ -179,5 +179,3 @@ RC RelationManager::addAttribute(const string &tableName, const Attribute &attr)
 {
     return -1;
 }
-
-
