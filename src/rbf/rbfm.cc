@@ -1000,7 +1000,7 @@ RC RBFM_ScanIterator::getNextRecord(RID &rid, void *data){
 	void *tmpData = malloc(recordMaxSize);
 	RID tmpRid;
 	DIRECTORYSLOT tmpSlot;
-	// treverse records in page
+	// traverse records in page
 	unsigned curSlotId = slotNum;
 	unsigned curPageId = pageNum;
 	bool notScan = true;

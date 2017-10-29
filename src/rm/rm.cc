@@ -255,7 +255,7 @@ int RelationManager::VarCharToString(void *data,string &str){
 	memcpy(VarCharData,(char *)data+offset,size);
 	offset+=size;
 
-//	VarCharData[size]='\0';
+	VarCharData[size]='\0';
 	string tempstring(VarCharData);
 	str=tempstring;
 
@@ -562,11 +562,10 @@ int RelationManager::IsSystemTable(const string &tableName){
 			//!!!! skip null indicator
 			memcpy(&systemtable,(char *)data+1,sizeof(int));
 			count++;
-
-			assert( count < 2 && "There are two record in Tables with same table name");
-			if(count>=2){
-				cout<<"There are two record in Tables with same table name "<<endl;
-			}
+			break;
+//			if(count>=2){
+//				cout<<"There are two record in Tables with same table name "<<endl;
+//			}
 		}
 		rm_ScanIterator.close();
 		free(VarChardata);
