@@ -70,21 +70,29 @@ int RBFTest_scan(RecordBasedFileManager *rbfm) {
     rc = rbfm->insertRecord(fileHandle, recordDescriptor, record2, rid);
     assert(rc == success && "Inserting a record should not fail.");
     rbfm->printRecord(recordDescriptor, record2);
+
+    prepareRecord(recordDescriptor.size(), nullsIndicator, 9, "Anteater7", 25, 175.2, 6200, record2, &recordSize);
+    cout << endl << "Inserting Data:" << endl;
+    rc = rbfm->insertRecord(fileHandle, recordDescriptor, record2, rid);
+    assert(rc == success && "Inserting a record should not fail.");
+    rbfm->printRecord(recordDescriptor, record2);
     cout<<endl;
+
+
     // rbfm scan
     string conditionalAttribute = "EmpName";
     void *compVal = malloc(sizeof(12));
-    string a ="Anteater";
-    int l = 8;
+    string a ="Anteater2";
+    int l = 9;
     memcpy(compVal, &l, 4);
-    memcpy( (char*)compVal + 4, a.c_str(), 8 );
+    memcpy( (char*)compVal + 4, a.c_str(), 9 );
     vector<string> attributeNames;
     attributeNames.push_back("EmpName");
     attributeNames.push_back("Age");
     attributeNames.push_back("Height");
     attributeNames.push_back("Salary");
     RBFM_ScanIterator rbfm_ScanIterator;
-    bool rf = rbfm->scan(fileHandle, recordDescriptor, conditionalAttribute, EQ_OP, compVal, attributeNames, rbfm_ScanIterator);
+    RC rf = rbfm->scan(fileHandle, recordDescriptor, conditionalAttribute, EQ_OP, compVal, attributeNames, rbfm_ScanIterator);
 
     rc = -1;
     while( rbfm_ScanIterator.getNextRecord(rid, returnedData) != -1 )

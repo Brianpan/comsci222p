@@ -236,6 +236,7 @@ RC RecordBasedFileManager::readRecord(FileHandle &fileHandle, const vector<Attri
     void* tmpPage = malloc(PAGE_SIZE);
     if( fileHandle.readPage(pageNum, tmpPage) == -1 )
     {
+    	free(tmpPage);
     	return  -1;
     }
     // get record offset
@@ -248,7 +249,11 @@ RC RecordBasedFileManager::readRecord(FileHandle &fileHandle, const vector<Attri
     SlotType slotType = slot.slotType;
 
     // record deleted
-    if( slotType == Deleted ) return -1;
+    if( slotType == Deleted )
+    {
+    	free(tmpPage);
+    	return -1;
+    }
 
     RID tmpRid;
     while( slotType == MasterPointer || slotType == SlavePointer )
@@ -879,7 +884,7 @@ RC RecordBasedFileManager::readAttribute(FileHandle &fileHandle, const vector<At
 	string columnName;
 	AttrType columnType;
 	AttrLength columnLength;
-	bool success = -1;
+	RC success = -1;
 	unsigned char *destColumnNullIndicator = (unsigned char*) malloc(1);
 
 	for( int i=0; i<recordColumnLen; i++ )
@@ -1053,7 +1058,7 @@ RC RBFM_ScanIterator::getNextRecord(RID &rid, void *data){
 			curSlotId = 0;
 		}
 	}
-	bool success = RBFM_EOF;
+	RC success = RBFM_EOF;
 
 	_cursor.pageNum = tmpRid.pageNum;
 	_cursor.slotNum = tmpRid.slotNum+1;
@@ -1074,7 +1079,7 @@ RC RBFM_ScanIterator::prepareRecord(void *fetchedData, void *data){
 
 	unsigned recordSize = _recordDescriptor.size();
 	vector<string> recordName;
-	bool success = 0;
+	RC success = 0;
 
 	int nullBytes= getActualBytesForNullsIndicator( recordSize );
 	unsigned char* nullIndicator = (unsigned char*) malloc(nullBytes);

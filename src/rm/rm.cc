@@ -586,6 +586,8 @@ RC RelationManager::insertTuple(const string &tableName, const void *data, RID &
 		return -1;
 
 	FileHandle fileHandle;
+	if ( _rbf_manager->openFile( tableName, fileHandle ) != 0 )
+			return -1;
 
 	if( _rbf_manager->insertRecord( fileHandle, recordDescriptor, data, rid ) == 0 )
 	{
@@ -603,6 +605,8 @@ RC RelationManager::deleteTuple(const string &tableName, const RID &rid)
 		return -1;
 
 	FileHandle fileHandle;
+	if ( _rbf_manager->openFile( tableName, fileHandle ) != 0 )
+		return -1;
 
 	if( _rbf_manager->deleteRecord( fileHandle, recordDescriptor, rid ) == 0 )
 	{
@@ -620,6 +624,8 @@ RC RelationManager::updateTuple(const string &tableName, const void *data, const
 		return -1;
 
 	FileHandle fileHandle;
+	if ( _rbf_manager->openFile( tableName, fileHandle ) != 0 )
+		return -1;
 
 	if( _rbf_manager->updateRecord( fileHandle, recordDescriptor, data, rid ) == 0 )
 	{
