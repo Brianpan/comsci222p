@@ -30,7 +30,6 @@ RC TEST_RM_09(const string &tableName, vector<RID> &rids, vector<int> &sizes)
         memset(returnedData, 0, 4000);
         rc = rm->readTuple(tableName, rids[i], returnedData);
         assert(rc == success && "RelationManager::readTuple() should not fail.");
-
         size = 0;
         prepareLargeTuple(attrs.size(), nullsIndicator, i, tuple, &size);
         if(memcmp(returnedData, tuple, sizes[i]) != 0)

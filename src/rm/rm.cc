@@ -655,7 +655,8 @@ RC RelationManager::readTuple(const string &tableName, const RID &rid, void *dat
 
 RC RelationManager::printTuple(const vector<Attribute> &attrs, const void *data)
 {
-	return _rbf_manager->printRecord( attrs, data );
+	RC success = _rbf_manager->printRecord( attrs, data );
+	return success;
 }
 
 RC RelationManager::readAttribute(const string &tableName, const RID &rid, const string &attributeName, void *data)

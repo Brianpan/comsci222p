@@ -514,41 +514,14 @@ RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle, const vector<Att
 	RecordMinLen slotCount, newSlotCount;
 
 	memcpy( &slotCount, (char*) tmpPage + getSlotCountOffset(), sizeof(RecordMinLen) );
-	newSlotCount = slotCount - 1;
-	memcpy( (char*) tmpPage + getSlotCountOffset(), &newSlotCount, sizeof(RecordMinLen) );
+//	newSlotCount = slotCount - 1;
+//	memcpy( (char*) tmpPage + getSlotCountOffset(), &newSlotCount, sizeof(RecordMinLen) );
 
 	// get restSize
 	RecordMinLen restSize;
 	memcpy( &restSize, (char*) tmpPage + getRestSizeOffset(), sizeof(RecordMinLen) );
 	restSize += deletedRecordSize;
 	memcpy( (char*) tmpPage + getRestSizeOffset(), &restSize, sizeof(RecordMinLen) );
-
-	// calculate total size between slotNum+1 -> slotNum End
-	// not the last slot
-	if( slotNum != (slotCount-1) )
-	{
-		DIRECTORYSLOT nextSlot, lastSlot;
-		memcpy( &nextSlot, (char*)tmpPage + getSlotOffset(slotNum+1), sizeof(DIRECTORYSLOT) );
-		memcpy( &lastSlot, (char*)tmpPage + getSlotOffset(slotCount-1), sizeof(DIRECTORYSLOT) );
-		RecordMinLen shiftedLen = lastSlot.pageOffset + lastSlot.recordSize - nextSlot.pageOffset;
-
-		// from here add deletedRecordSize to memset 0
-		RecordMinLen shiftedResetOffset = lastSlot.pageOffset + lastSlot.recordSize - deletedRecordSize;
-
-		// shift pageOffset
-		memmove( (char*)tmpPage + deletedRecordOffset, (char*)tmpPage + nextSlot.pageOffset, shiftedLen );
-		memset( (char*)tmpPage + shiftedResetOffset, 0, deletedRecordSize );
-		// update slots after slotNum
-		RecordMinLen slotIter = slotNum + 1;
-		while( slotIter < slotCount )
-		{
-			DIRECTORYSLOT s;
-			memcpy( &s, (char*)tmpPage + getSlotOffset(slotIter), sizeof(DIRECTORYSLOT) );
-			s.pageOffset -= deletedRecordSize;
-			memcpy( (char*)tmpPage + getSlotOffset(slotIter), &s, sizeof(DIRECTORYSLOT) );
-			slotIter += 1;
-		}
-	}
 
 	// get rid
 	bool shouldTreverseDeleteNode = false;
@@ -557,6 +530,46 @@ RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle, const vector<Att
 	{
 		shouldTreverseDeleteNode = true;
 		memcpy( &treverseRid, (char*)tmpPage + deletedRecordOffset, sizeof(RID) );
+	}
+	
+	// calculate total size between slotNum+1 -> slotNum End
+	// not the last slot
+	if( slotNum != (slotCount-1) )
+	{
+		DIRECTORYSLOT nextSlot, lastSlot;
+		memcpy( &nextSlot, (char*)tmpPage + getSlotOffset(slotNum+1), sizeof(DIRECTORYSLOT) );
+		int slotIdx = slotCount - 1;
+		// if last is deleted move back
+		do{
+			memcpy( &lastSlot, (char*)tmpPage + getSlotOffset(slotIdx), sizeof(DIRECTORYSLOT) );
+			slotIdx -= 1;
+		}while( lastSlot.slotType == Deleted && slotIdx >= (slotNum+1) );
+
+		// the slotNum is the last available Slot
+		if( slotIdx != slotNum && lastSlot.slotType != Deleted )
+		{
+			RecordMinLen shiftedLen = lastSlot.pageOffset + lastSlot.recordSize - nextSlot.pageOffset;
+
+			// from here add deletedRecordSize to memset 0
+			RecordMinLen shiftedResetOffset = lastSlot.pageOffset + lastSlot.recordSize - deletedRecordSize;
+
+			// shift pageOffset
+			memmove( (char*)tmpPage + deletedRecordOffset, (char*)tmpPage + nextSlot.pageOffset, shiftedLen );
+			memset( (char*)tmpPage + shiftedResetOffset, 0, deletedRecordSize );
+			// update slots after slotNum
+			RecordMinLen slotIter = slotNum + 1;
+			while( slotIter < slotCount )
+			{
+				DIRECTORYSLOT s;
+				memcpy( &s, (char*)tmpPage + getSlotOffset(slotIter), sizeof(DIRECTORYSLOT) );
+				if( s.slotType != Deleted )
+				{
+					s.pageOffset -= deletedRecordSize;
+					memcpy( (char*)tmpPage + getSlotOffset(slotIter), &s, sizeof(DIRECTORYSLOT) );
+				}
+				slotIter += 1;
+			}
+		}
 	}
 
 	// clear slot and save
