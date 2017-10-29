@@ -794,14 +794,16 @@ RC RecordBasedFileManager::scan(FileHandle &fileHandle,
 	}
 
 	// check whether attributeNames contain the attribute not in recordDescriptor
-	for( int i=0;i<attributeNames.size(); i++ )
+	if( compOp != NO_OP )
 	{
-		if( find( rbfm_ScanIterator._recordName.begin(), rbfm_ScanIterator._recordName.end(), attributeNames[i] ) == rbfm_ScanIterator._recordName.end() )
+		for( int i=0;i<attributeNames.size(); i++ )
 		{
-			return -1;
+			if( find( rbfm_ScanIterator._recordName.begin(), rbfm_ScanIterator._recordName.end(), attributeNames[i] ) == rbfm_ScanIterator._recordName.end() )
+			{
+				return -1;
+			}
 		}
 	}
-
 	string columnName;
 	AttrType columnType;
 	AttrLength columnLength;
@@ -813,9 +815,9 @@ RC RecordBasedFileManager::scan(FileHandle &fileHandle,
 			columnLength = recordDescriptor[i].length;
 		if( columnName == conditionAttribute )
 		{
-				rbfm_ScanIterator._columnPivot = i;
-				rbfm_ScanIterator._columnType = columnType;
-				break;
+			rbfm_ScanIterator._columnPivot = i;
+			rbfm_ScanIterator._columnType = columnType;
+			break;
 		}
 	}
 	rbfm_ScanIterator._recordDescriptor = recordDescriptor;
@@ -826,7 +828,7 @@ RC RecordBasedFileManager::scan(FileHandle &fileHandle,
 	rbfm_ScanIterator._fileHandlePtr = &fileHandle;
 
 	// init load first tmpPage
-	if ( fileHandle.readPage( 0, rbfm_ScanIterator._tmpPage ) != 0)
+	if ( rbfm_ScanIterator._fileHandlePtr->readPage( 0, rbfm_ScanIterator._tmpPage ) != 0 )
 		return -1;
 	return 0;
 }
@@ -963,7 +965,7 @@ RC RBFM_ScanIterator::getNextRecord(RID &rid, void *data){
 	if( !_isFirstIter )
 	{
 		pageNum = _cursor.pageNum;
-		slotNum = _cursor.slotNum + 1;
+		slotNum = _cursor.slotNum;
 
 		if( (unsigned)pageNum > (unsigned)maxPage || _fileHandlePtr->readPage(pageNum, _tmpPage) != 0 )
 		{
@@ -1052,10 +1054,11 @@ RC RBFM_ScanIterator::getNextRecord(RID &rid, void *data){
 		}
 	}
 	bool success = RBFM_EOF;
+
+	_cursor.pageNum = tmpRid.pageNum;
+	_cursor.slotNum = tmpRid.slotNum+1;
 	if( !notScan )
 	{
-		_cursor.pageNum = tmpRid.pageNum;
-		_cursor.slotNum = tmpRid.slotNum;
 		_isFirstIter = false;
 		rid.pageNum = tmpRid.pageNum;
 		rid.slotNum = tmpRid.slotNum;
@@ -1225,6 +1228,7 @@ RC RBFM_ScanIterator::checkRecord(const RID rid, void* data) {
 				success = -1;
 				break;
 			}
+
 			if( memcmp(destColumn, compColumn, compLen) == 0)
 			{
 				success = 0;

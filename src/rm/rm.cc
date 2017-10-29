@@ -255,7 +255,7 @@ int RelationManager::VarCharToString(void *data,string &str){
 	memcpy(VarCharData,(char *)data+offset,size);
 	offset+=size;
 
-	VarCharData[size]='\0';
+//	VarCharData[size]='\0';
 	string tempstring(VarCharData);
 	str=tempstring;
 
@@ -411,10 +411,7 @@ int RelationManager::getTableId(const string &tableName){
 			//!!!! skip null indicator
 			memcpy(&tableid,(char *)data+1,sizeof(int));
 			count++;
-			assert( count < 2 && "should be exact one table-id match one table name" );
-			if(count>=2){
-				cout<<"There are two record in Tables with same table name "<<endl;
-			}
+			break;
 		}
 		rm_ScanIterator.close();
 
@@ -500,7 +497,7 @@ RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &at
 	attrname.push_back("column-length");
 	attrname.push_back("column-position");
 
-	//attrname.push_back("NullFlag");
+	attrname.push_back("NullFlag");
 
 	Attribute attr;
 	string tempstr;
@@ -683,13 +680,13 @@ RC RelationManager::scan(const string &tableName,
       const vector<string> &attributeNames,
       RM_ScanIterator &rm_ScanIterator)
 {
-	RecordBasedFileManager*_rbf_manager = RecordBasedFileManager::instance();
+	_rbf_manager = RecordBasedFileManager::instance();
 	FileHandle fileHandle;
 	if ( _rbf_manager->openFile( tableName, fileHandle ) != 0 )
 		return -1;
 	// prepare recordDescriptor
 	vector<Attribute> recordDescriptor;
-	if( getAttributes( tableName, recordDescriptor ) != 0)
+	if( getTableAttributes( tableName, recordDescriptor ) != 0)
 		return -1;
 
 	// set up rm_ScanIterator
@@ -697,7 +694,8 @@ RC RelationManager::scan(const string &tableName,
 	rm_ScanIterator._rbf_scanIter._fileHandlePtr = &rm_ScanIterator._fileHandle;
 
 	// run record scan
-	return _rbf_manager->scan( rm_ScanIterator._fileHandle, recordDescriptor, conditionAttribute, compOp, value, attributeNames, rm_ScanIterator._rbf_scanIter );
+	RC success = _rbf_manager->scan( rm_ScanIterator._fileHandle, recordDescriptor, conditionAttribute, compOp, value, attributeNames, rm_ScanIterator._rbf_scanIter );
+	return success;
 }
 
 RC RelationManager::getTableAttributes(const string &tableName, vector<Attribute> &attrs){
