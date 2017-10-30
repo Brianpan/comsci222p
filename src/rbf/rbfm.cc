@@ -1282,11 +1282,11 @@ RC RBFM_ScanIterator::checkRecord(const RID rid, void* data) {
 			{
 				if( _columnType == TypeInt )
 				{
-					compBool = ( (int*)destColumn < (int*)compColumn );
+					compBool = ( *((int*)destColumn) < *((int*)compColumn) );
 				}
 				else
 				{
-					compBool = ( (float*)destColumn < (float*)compColumn );
+					compBool = ( *((float*)destColumn) < *((float*)compColumn) );
 				}
 				if( compBool )
 				{
@@ -1310,11 +1310,11 @@ RC RBFM_ScanIterator::checkRecord(const RID rid, void* data) {
 			{
 				if( _columnType == TypeInt )
 				{
-					compBool = ( (int*)destColumn <= (int*)compColumn );
+					compBool = ( *((int*)destColumn) <= *((int*)compColumn) );
 				}
 				else
 				{
-					compBool = ( (float*)destColumn <= (float*)compColumn );
+					compBool = ( *((float*)destColumn) <= *((float*)compColumn) );
 				}
 				if( compBool )
 				{
@@ -1338,11 +1338,11 @@ RC RBFM_ScanIterator::checkRecord(const RID rid, void* data) {
 			{
 				if( _columnType == TypeInt )
 				{
-					compBool = ( (int*)destColumn > (int*)compColumn );
+					compBool = ( *((int*)destColumn) > *((int*)compColumn) );
 				}
 				else
 				{
-					compBool = ( (float*)destColumn > (float*)compColumn );
+					compBool = ( *((float*)destColumn) > *((float*)compColumn) );
 				}
 				if( compBool )
 				{
@@ -1366,11 +1366,11 @@ RC RBFM_ScanIterator::checkRecord(const RID rid, void* data) {
 			{
 				if( _columnType == TypeInt )
 				{
-					compBool = ( (int*)destColumn >= (int*)compColumn );
+					compBool = ( *((int*)destColumn) >= *((int*)compColumn) );
 				}
 				else
 				{
-					compBool = ( (float*)destColumn >= (float*)compColumn );
+					compBool = ( *((float*)destColumn) >= *((float*)compColumn) );
 				}
 				if( compBool )
 				{
@@ -1399,11 +1399,11 @@ RC RBFM_ScanIterator::checkRecord(const RID rid, void* data) {
 			{
 				if( _columnType == TypeInt )
 				{
-					compBool = ( (int*)destColumn != (int*)compColumn );
+					compBool = ( *((int*)destColumn) != *((int*)compColumn) );
 				}
 				else
 				{
-					compBool = ( (float*)destColumn != (float*)compColumn );
+					compBool = ( *((float*)destColumn) != *((float*)compColumn) );
 				}
 				if( compBool )
 				{
