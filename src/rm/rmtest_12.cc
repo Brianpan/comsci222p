@@ -47,6 +47,7 @@ RC TEST_RM_12(const string &tableName)
             free(buffer);
         }
         j++;
+        cout<<rid.pageNum<<" "<<rid.slotNum<<endl;
         memset(returnedData, 0, 4000);
     }
     rmsi.close();

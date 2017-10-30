@@ -114,7 +114,7 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
 		RecordMinLen deletedPointer = -1;
 		void *directory = malloc(directorySize);
 		int tmpOffset = 0;
-		memcpy( (char*)directory + tmpOffset, (char*)slot, sizeof(DIRECTORYSLOT) );
+		memcpy( (char*)directory + tmpOffset, slot, sizeof(DIRECTORYSLOT) );
 		tmpOffset += sizeof(DIRECTORYSLOT);
 		memcpy( (char*)directory + tmpOffset,  &deletedPointer, sizeof(RecordMinLen) );
 		tmpOffset += sizeof(RecordMinLen);
@@ -510,6 +510,11 @@ RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle, const vector<Att
 	RecordMinLen deletedRecordOffset = tmpSlot.pageOffset;
 	SlotType deletedRecordSlotType = tmpSlot.slotType;
 
+	// already delete
+	if( deletedRecordSlotType == Deleted )
+	{
+		return -1;
+	}
 	// get slot num
 	RecordMinLen slotCount, newSlotCount;
 
@@ -596,7 +601,8 @@ RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle, const vector<Att
 	// if the record is pointer, it should delete recursively
 	if( shouldTreverseDeleteNode )
 	{
-		deleteRecord( fileHandle, recordDescriptor, treverseRid );
+		if( deleteRecord( fileHandle, recordDescriptor, treverseRid ) != 0 )
+			return -1;
 	}
 	return 0;
 }
@@ -968,6 +974,7 @@ RBFM_ScanIterator::RBFM_ScanIterator(){
 }
 
 RBFM_ScanIterator::~RBFM_ScanIterator(){
+	_fileHandlePtr = NULL;
 }
 
 RC RBFM_ScanIterator::close(){
@@ -985,9 +992,13 @@ RC RBFM_ScanIterator::getNextRecord(RID &rid, void *data){
 		pageNum = _cursor.pageNum;
 		slotNum = _cursor.slotNum;
 
-		if( (unsigned)pageNum > (unsigned)maxPage || _fileHandlePtr->readPage(pageNum, _tmpPage) != 0 )
+		unsigned ridPageNum = rid.pageNum;
+		if( ridPageNum != pageNum )
 		{
-			return -1;
+			if( (unsigned)pageNum > (unsigned)maxPage || _fileHandlePtr->readPage(pageNum, _tmpPage) != 0 )
+			{
+				return -1;
+			}
 		}
 	}
 
@@ -1071,6 +1082,7 @@ RC RBFM_ScanIterator::getNextRecord(RID &rid, void *data){
 			curSlotId = 0;
 		}
 	}
+
 	RC success = RBFM_EOF;
 
 	_cursor.pageNum = tmpRid.pageNum;
@@ -1133,7 +1145,9 @@ RC RBFM_ScanIterator::prepareRecord(void *fetchedData, void *data){
 
 	}
 
+	//!! here may modify
 	selectNullIndicator[0] = base10NullBytes;
+
 	memcpy( data, (char*)selectNullIndicator, selectNullBytes );
 
 	free(selectNullIndicator);

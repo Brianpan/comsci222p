@@ -16,7 +16,7 @@ RC TEST_RM_11(const string &tableName, vector<RID> &rids)
     // Delete the first 1000 tuples
     for(int i = 0; i < 1000; i++)
     {
-    	rc = rm->deleteTuple(tableName, rids[i]);
+        rc = rm->deleteTuple(tableName, rids[i]);
         assert(rc == success && "RelationManager::deleteTuple() should not fail.");
     }
 

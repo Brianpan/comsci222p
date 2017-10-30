@@ -479,7 +479,7 @@ RC RelationManager::deleteTable(const string &tableName)
 
 		}
 	}
-	assert( false &&"There is bug on deleteTable ");
+//	assert( false &&"There is bug on deleteTable ");
 	free(data);
     return -1;
 }
