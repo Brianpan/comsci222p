@@ -155,20 +155,19 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
 		if( deletedPointer != -1 )
 		{
 			// use deleted slot
-			DIRECTORYSLOT tmpSlot;
 			rid.pageNum = pageNum;
 			rid.slotNum = deletedPointer;
 			shouldUpdatePage = true;
 
 			// update deletedPointer
-			int newSlotNum = slotSize - deletedPointer - 1;
+			int restSlotNum = slotSize - deletedPointer - 1;
 			bool hasDeletedNode = false;
-			if( newSlotNum > 0 )
+			if( restSlotNum > 0 )
 			{
 				int pivot = 0;
-				DIRECTORYSLOT *afterCurSlots = new DIRECTORYSLOT[newSlotNum];
-				memcpy( afterCurSlots, (char*)tmpPage + getSlotOffset(deletedPointer+1), sizeof(DIRECTORYSLOT)*newSlotNum );
-				while( pivot < newSlotNum )
+				DIRECTORYSLOT *afterCurSlots = new DIRECTORYSLOT[restSlotNum];
+				memcpy( afterCurSlots, (char*)tmpPage + getSlotOffset(deletedPointer+1), sizeof(DIRECTORYSLOT)*restSlotNum );
+				while( pivot < restSlotNum )
 				{
 					if( afterCurSlots[pivot].slotType == Deleted )
 					{
@@ -187,6 +186,8 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
 			}
 
 			memcpy( (char*)tmpPage + getDeletedPointerOffset(), &deletedPointer, sizeof(RecordMinLen) );
+			// write to page
+			fileHandle.writePage(pageNum, tmpPage);
 		}
 		else
 		{
@@ -215,6 +216,7 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
 
 		// write to page
 		fileHandle.writePage(pageNum, tmpPage);
+		cout<<"PageNum:"<<pageNum<<" "<<"slotSize:"<<slotSize<<endl;
 	}
 
 	//free pointer and return
@@ -516,11 +518,8 @@ RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle, const vector<Att
 		return -1;
 	}
 	// get slot num
-	RecordMinLen slotCount, newSlotCount;
-
+	RecordMinLen slotCount;
 	memcpy( &slotCount, (char*) tmpPage + getSlotCountOffset(), sizeof(RecordMinLen) );
-//	newSlotCount = slotCount - 1;
-//	memcpy( (char*) tmpPage + getSlotCountOffset(), &newSlotCount, sizeof(RecordMinLen) );
 
 	// get restSize
 	RecordMinLen restSize;
@@ -551,7 +550,7 @@ RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle, const vector<Att
 		}while( lastSlot.slotType == Deleted && slotIdx >= (slotNum+1) );
 
 		// the slotNum is the last available Slot
-		if( slotIdx != slotNum && lastSlot.slotType != Deleted )
+		if( lastSlot.slotType != Deleted )
 		{
 			RecordMinLen shiftedLen = lastSlot.pageOffset + lastSlot.recordSize - nextSlot.pageOffset;
 
@@ -563,9 +562,9 @@ RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle, const vector<Att
 			memset( (char*)tmpPage + shiftedResetOffset, 0, deletedRecordSize );
 			// update slots after slotNum
 			RecordMinLen slotIter = slotNum + 1;
+			DIRECTORYSLOT s;
 			while( slotIter < slotCount )
 			{
-				DIRECTORYSLOT s;
 				memcpy( &s, (char*)tmpPage + getSlotOffset(slotIter), sizeof(DIRECTORYSLOT) );
 				if( s.slotType != Deleted )
 				{
@@ -696,11 +695,11 @@ RC RecordBasedFileManager::updateRecord(FileHandle &fileHandle, const vector<Att
 	{
 		// update slot
 		curSlot.recordSize = recordFullSize;
-		curSlot.slotType = Normal;
 		copySize = recordFullSize;
 		restSize -= recordDiff;
 		if( curSlotType == Deleted )
 		{
+			curSlot.slotType = Normal;
 			RecordMinLen offset = 0;
 			if( slotNum != (slotCount -1) )
 			{
@@ -1025,8 +1024,9 @@ RC RBFM_ScanIterator::getNextRecord(RID &rid, void *data){
 		}
 
 	}
+	//@@@@
 	unsigned recordMaxSize = getRecordSize( _recordDescriptor );
-	void *tmpData = malloc(recordMaxSize);
+	void *tmpData = malloc(PAGE_SIZE);
 	RID tmpRid;
 	DIRECTORYSLOT tmpSlot;
 	// traverse records in page
@@ -1432,6 +1432,7 @@ RC RBFM_ScanIterator::readFullRecord(const RID &rid, void *data) {
     void* tmpPage = malloc(PAGE_SIZE);
     if( _fileHandlePtr->readPage(pageNum, tmpPage) == -1 )
     {
+    	free(tmpPage);
     	return  -1;
     }
     // get record offset
@@ -1444,8 +1445,11 @@ RC RBFM_ScanIterator::readFullRecord(const RID &rid, void *data) {
     SlotType slotType = slot.slotType;
 
     // record deleted
-    if( slotType == Deleted ) return -1;
-
+    if( slotType == Deleted )
+    {
+    	free(tmpPage);
+    	return -1;
+    }
     RID tmpRid;
     while( slotType == MasterPointer || slotType == SlavePointer )
     {
