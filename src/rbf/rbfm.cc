@@ -1137,6 +1137,7 @@ RC RBFM_ScanIterator::getNextRecord(RID &rid, void *data){
 				curPageId += 1;
 				_fileHandlePtr->readPage(curPageId, _tmpPage);
 				memcpy( &curTotalSlot, (char*)_tmpPage + getSlotCountOffset(), sizeof(RecordMinLen) );
+				curSlotId = 0;
 			}
 			// in the maxpage still has nothing to read
 			if(curTotalSlot == 0)
