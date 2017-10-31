@@ -281,10 +281,12 @@ RelationManager::RelationManager()
 {  
 //    debug = true;
     rbfm = RecordBasedFileManager::instance();
+    _fileHandle = new FileHandle;
 }
 
 RelationManager::~RelationManager()
 {
+	delete _fileHandle;
 }
 
 RC RelationManager::createCatalog()
@@ -585,9 +587,17 @@ RC RelationManager::insertTuple(const string &tableName, const void *data, RID &
 	if( getTableAttributes( tableName, recordDescriptor ) != 0 )
 		return -1;
 
+
+//	if( _tableName != tableName )
+//	{
+//		if(_tableName != "")
+//			_rbf_manager->closeFile( *_fileHandle );
 	FileHandle fileHandle;
 	if ( _rbf_manager->openFile( tableName, fileHandle ) != 0 )
-			return -1;
+		return -1;
+//		_tableName = tableName;
+//	}
+
 
 	if( _rbf_manager->insertRecord( fileHandle, recordDescriptor, data, rid ) == 0 )
 	{

@@ -91,7 +91,8 @@ public:
 
   RC addAttribute(const string &tableName, const Attribute &attr);
 
-  FileHandle _fileHandle;
+  FileHandle *_fileHandle;
+  string _tableName;
 
 protected:
   RelationManager();

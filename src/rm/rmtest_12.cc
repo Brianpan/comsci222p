@@ -21,46 +21,37 @@ RC TEST_RM_12(const string &tableName)
 
     int nullAttributesIndicatorActualSize = getActualByteForNullsIndicator(attrs.size());
 
-	vector<int> a;
-
     while(rmsi.getNextTuple(rid, returnedData) != RM_EOF)
     {
-//    	if(j % 10 == 0)
-//        {
-            int red = j/10;
-//        	cout<<red;
-        	int offset = 0;
+        if(j % 200 == 0)
+        {
+            int offset = 0;
 
-
-
-//            cout << "Real Value: " << *(float *)((char *)returnedData+nullAttributesIndicatorActualSize) << endl;
+            cout << "Real Value: " << *(float *)((char *)returnedData+nullAttributesIndicatorActualSize) << endl;
             offset += 4;
         
             int size = *(int *)((char *)returnedData + offset + nullAttributesIndicatorActualSize);
-//            cout << "Varchar size: " << size << endl;
+            cout << "Varchar size: " << size << endl;
             offset += 4;
 
             char *buffer = (char *)malloc(size + 1);
             memcpy(buffer, (char *)returnedData + offset + nullAttributesIndicatorActualSize, size);
             buffer[size] = 0;
             offset += size;
-//            cout << "VarChar Value: " << buffer << endl;
-//            if( find(a.begin(), a.end(), *(int *)((char *)returnedData + offset + nullAttributesIndicatorActualSize)) != a.end() )
-            cout<<"Duplicated: "<<rid.pageNum<<","<<rid.slotNum<<" "<<*(int *)((char *)returnedData + offset + nullAttributesIndicatorActualSize)<<endl;
-            a.push_back(*(int *)((char *)returnedData + offset + nullAttributesIndicatorActualSize));
-//            cout << "Integer Value: " << *(int *)((char *)returnedData + offset + nullAttributesIndicatorActualSize) << endl << endl;
+    
+            cout << "VarChar Value: " << buffer << endl;
+
+            cout << "Integer Value: " << *(int *)((char *)returnedData + offset + nullAttributesIndicatorActualSize) << endl << endl;
             offset += 4;
 
             free(buffer);
-//        }
+        }
         j++;
-        cout<<j<<endl;
-//        cout<<rid.pageNum<<" "<<rid.slotNum<<endl;
         memset(returnedData, 0, 4000);
     }
     rmsi.close();
     cout << "Total number of tuples: " << j << endl << endl;
-    if (j > 150) {
+    if (j > 1000) {
         cout << "***** [FAIL] Test Case 12 Failed *****" << endl << endl;
         free(returnedData);
         return -1;

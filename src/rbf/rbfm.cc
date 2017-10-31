@@ -186,7 +186,7 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
 
 		// write to page
 		fileHandle.writePage(pageNum, tmpPage);
-		cout<<"PageNum:"<<pageNum<<" "<<"slotSize:"<<slotSize<<endl;
+//		cout<<"PageNum:"<<pageNum<<" "<<"slotSize:"<<slotSize<<endl;
 	}
 
 	//free pointer and return
@@ -557,7 +557,7 @@ RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle, const vector<Att
 	memcpy( &deletedPointer, (char*)tmpPage + getDeletedPointerOffset(), sizeof(RecordMinLen) );
 	RecordMinLen sNum = slotNum;
 
-	cout<<"pageNum: "<<pageNum<<" sNum:"<<sNum<<endl;
+//	cout<<"pageNum: "<<pageNum<<" sNum:"<<sNum<<endl;
 	if( deletedPointer == -1 || deletedPointer > sNum )
 	{
 		memcpy( (char*)tmpPage + getDeletedPointerOffset(), &sNum, sizeof(RecordMinLen) );

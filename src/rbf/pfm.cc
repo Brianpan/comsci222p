@@ -226,10 +226,11 @@ void FileHandle::fetchFileData()
 		_handler->seekg(0, ios_base::beg);
 		memset( counter, 0, sizeof(unsigned)*4 );
 
-		void* blankPage = malloc(PAGE_SIZE);
+		void *blankPage = malloc(PAGE_SIZE);
 		memcpy( blankPage, (void*)counter, sizeof(unsigned)*4 );
 
 		_handler->write( (char*) blankPage, PAGE_SIZE );
+		free(blankPage);
 	}
 
 	pageCounter = counter[0];
@@ -238,7 +239,6 @@ void FileHandle::fetchFileData()
 	appendPageCounter = counter[3];
 
 	// release counter
-	return;
 }
 
 void FileHandle::saveCounter()
