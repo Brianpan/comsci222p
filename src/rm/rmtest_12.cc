@@ -20,18 +20,18 @@ RC TEST_RM_12(const string &tableName)
     void *returnedData = malloc(4000);
 
     int nullAttributesIndicatorActualSize = getActualByteForNullsIndicator(attrs.size());
-
+    cout<<"------------start--------------"<<endl;
     while(rmsi.getNextTuple(rid, returnedData) != RM_EOF)
     {
-        if(j % 200 == 0)
-        {
+//        if(j % 200 == 0)
+//        {
             int offset = 0;
-
-            cout << "Real Value: " << *(float *)((char *)returnedData+nullAttributesIndicatorActualSize) << endl;
+            cout<<"page num: "<<rid.pageNum<<" slot num:"<<rid.slotNum<<endl;
+//            cout << "Real Value: " << *(float *)((char *)returnedData+nullAttributesIndicatorActualSize) << endl;
             offset += 4;
         
             int size = *(int *)((char *)returnedData + offset + nullAttributesIndicatorActualSize);
-            cout << "Varchar size: " << size << endl;
+//            cout << "Varchar size: " << size << endl;
             offset += 4;
 
             char *buffer = (char *)malloc(size + 1);
@@ -39,19 +39,19 @@ RC TEST_RM_12(const string &tableName)
             buffer[size] = 0;
             offset += size;
     
-            cout << "VarChar Value: " << buffer << endl;
+//            cout << "VarChar Value: " << buffer << endl;
 
             cout << "Integer Value: " << *(int *)((char *)returnedData + offset + nullAttributesIndicatorActualSize) << endl << endl;
             offset += 4;
 
             free(buffer);
-        }
+//        }
         j++;
         memset(returnedData, 0, 4000);
     }
     rmsi.close();
     cout << "Total number of tuples: " << j << endl << endl;
-    if (j > 1000) {
+    if (j > 150) {
         cout << "***** [FAIL] Test Case 12 Failed *****" << endl << endl;
         free(returnedData);
         return -1;

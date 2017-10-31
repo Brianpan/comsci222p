@@ -7,7 +7,7 @@ RC TEST_RM_10(const string &tableName, vector<RID> &rids, vector<int> &sizes)
     // 2. read tuple
     cout << endl << "***** In RM Test case 10 *****" << endl;
 
-    int numTuples = 2000;
+    int numTuples = 300;
     void *tuple = malloc(4000);
     void *returnedData = malloc(4000);
     
@@ -25,7 +25,7 @@ RC TEST_RM_10(const string &tableName, vector<RID> &rids, vector<int> &sizes)
 
     // Update the first 1000 tuples
     int size = 0;
-    for(int i = 0; i < 1000; i++)
+    for(int i = 0; i < 150; i++)
     {
         memset(tuple, 0, 4000);
         RID rid = rids[i];
@@ -36,10 +36,11 @@ RC TEST_RM_10(const string &tableName, vector<RID> &rids, vector<int> &sizes)
 
         sizes[i] = size;
         rids[i] = rid;
+        cout<<"i:"<<i<<"size: "<<size<<" rid:"<<rid.pageNum<<" "<<rid.slotNum<<endl;
     }
 
     // Read the updated records and check the integrity
-    for(int i = 0; i < 1000; i++)
+    for(int i = 0; i < 150; i++)
     {
         memset(tuple, 0, 4000);
         memset(returnedData, 0, 4000);

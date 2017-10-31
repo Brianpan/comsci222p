@@ -168,6 +168,7 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
 			slot->slotType = Normal;
 
 			slotSize += 1;
+			cout<<"slave: recordsize"<<localOffset<<" last page offset:"<<lastSlot.pageOffset<<" last record size:"<<lastSlot.recordSize<<endl;
 			restSize -= (localOffset + sizeof(DIRECTORYSLOT) );
 			memcpy( (char*)tmpPage + getSlotOffset(slotSize-1), slot, sizeof(DIRECTORYSLOT) );
 			// copy recordData to page
@@ -219,7 +220,7 @@ RC RecordBasedFileManager::readRecord(FileHandle &fileHandle, const vector<Attri
     RecordMinLen pageOffset =  slot.pageOffset;
     RecordMinLen tmpSize = slot.recordSize;
     SlotType slotType = slot.slotType;
-
+    cout<<"rid: "<<rid.pageNum<<" "<<rid.slotNum<<"record size:"<<tmpSize<<"page offset:"<<pageOffset<<endl;
     // record deleted
     if( slotType == Deleted )
     {
@@ -242,6 +243,7 @@ RC RecordBasedFileManager::readRecord(FileHandle &fileHandle, const vector<Attri
     	pageOffset = slot.pageOffset;
     	tmpSize = slot.recordSize;
     	slotType = slot.slotType;
+    	cout<<"rid: "<<pageNum<<" "<<slotNum<<"record size:"<<tmpSize<<"page offset:"<<pageOffset<<endl;
     }
 
     int nullBytes= getActualBytesForNullsIndicator( recordSize );
@@ -594,6 +596,7 @@ RC RecordBasedFileManager::updateSlotType(FileHandle &fileHandle, RID &rid, Slot
 	curSlot.slotType = slotType;
 	memcpy( (char*)tmpPage + getSlotOffset(slotNum), &curSlot, sizeof(DIRECTORYSLOT) );
 
+	fileHandle.writePage(pageNum, tmpPage);
 	// free
 	free(tmpPage);
 
@@ -604,7 +607,7 @@ RC RecordBasedFileManager::updateRecord(FileHandle &fileHandle, const vector<Att
 	int maxPage = fileHandle.getNumberOfPages() - 1;
 	int pageNum = rid.pageNum;
 	int slotNum = rid.slotNum;
-
+	cout<<"rid:"<<pageNum<<" "<<slotNum<<endl;
 	void *tmpPage = malloc(PAGE_SIZE);
 
 	// definition
@@ -657,7 +660,6 @@ RC RecordBasedFileManager::updateRecord(FileHandle &fileHandle, const vector<Att
 	RecordMinLen originalRecordSize = curSlot.recordSize;
 	//  which can shift right
 	int recordDiff = recordFullSize - originalRecordSize;
-
 	// used for copyData at the end
 	unsigned copySize;
 	RID slaveRid;
@@ -777,12 +779,15 @@ RC RecordBasedFileManager::updateRecord(FileHandle &fileHandle, const vector<Att
 			free(recordData);
 			return -1;
 		}
+//		cout<<"slave: "<<slaveRid.pageNum<<","<<slaveRid.slotNum<<endl;
 		// update slaveRid's record SlotType
 		updateSlotType( fileHandle, slaveRid, DataPointer );
+		cout<<"slave: "<<slaveRid.pageNum<<","<<slaveRid.slotNum<<endl;
 
 		copySize = sizeof(RID);
 		restSize += originalRecordSize - sizeof(RID);
 	}
+	// update slot info
 	memcpy( (char*)tmpPage + getSlotOffset(slotNum), &curSlot, sizeof(DIRECTORYSLOT) );
 
 	// move slot
@@ -1062,10 +1067,12 @@ RBFM_ScanIterator::RBFM_ScanIterator(){
 }
 
 RBFM_ScanIterator::~RBFM_ScanIterator(){
+
 	_fileHandlePtr = NULL;
 }
 
 RC RBFM_ScanIterator::close(){
+	_fileHandlePtr->_handler->close();
 	free(_tmpPage);
 	return 0;
 }
@@ -1083,7 +1090,7 @@ RC RBFM_ScanIterator::getNextRecord(RID &rid, void *data){
 		unsigned ridPageNum = rid.pageNum;
 		if( ridPageNum != pageNum )
 		{
-			if( (unsigned)pageNum > (unsigned)maxPage || _fileHandlePtr->readPage(pageNum, _tmpPage) != 0 )
+			if( (int)pageNum > maxPage || _fileHandlePtr->readPage(pageNum, _tmpPage) != 0 )
 			{
 				return -1;
 			}
@@ -1097,7 +1104,7 @@ RC RBFM_ScanIterator::getNextRecord(RID &rid, void *data){
 	if( (unsigned)slotNum >= (unsigned)curTotalSlot )
 	{
 		// no more data to search for
-		if( (unsigned)maxPage == (unsigned)pageNum )
+		if( maxPage == (int)pageNum )
 		{
 			return -1;
 		}
@@ -1123,7 +1130,7 @@ RC RBFM_ScanIterator::getNextRecord(RID &rid, void *data){
 	bool notScan = true;
 	while(notScan && curTotalSlot > 0)
 	{
-		if( (unsigned)curPageId > (unsigned)maxPage )
+		if( (int)curPageId > maxPage )
 		{
 			break;
 		}
@@ -1132,7 +1139,7 @@ RC RBFM_ScanIterator::getNextRecord(RID &rid, void *data){
 		{
 			_fileHandlePtr->readPage(curPageId, _tmpPage);
 			memcpy( &curTotalSlot, (char*)_tmpPage + getSlotCountOffset(), sizeof(RecordMinLen) );
-			while( curTotalSlot == 0 && (unsigned)curPageId < (unsigned)maxPage )
+			while( curTotalSlot == 0 && (int)curPageId < maxPage )
 			{
 				curPageId += 1;
 				_fileHandlePtr->readPage(curPageId, _tmpPage);
@@ -1201,7 +1208,8 @@ RC RBFM_ScanIterator::prepareRecord(void *fetchedData, void *data){
 
 	int selectNullBytes = getActualBytesForNullsIndicator( needColumnSize );
 	unsigned char* selectNullIndicator = (unsigned char*) malloc(selectNullBytes);
-	int base10NullBytes = 0;
+	int base10NullBytes[selectNullBytes];
+	memset( base10NullBytes, 0, sizeof(int)*selectNullBytes );
 	unsigned newRecordOffset = selectNullBytes;
 
 	for( int i=0; i< needColumnSize;i++ )
@@ -1219,7 +1227,8 @@ RC RBFM_ScanIterator::prepareRecord(void *fetchedData, void *data){
 
 		if( isNull )
 		{
-			base10NullBytes += pow( 2, shiftBit );
+			int mod = i/8;
+			base10NullBytes[mod] += pow( 2, shiftBit );
 		}
 		else
 		{
@@ -1235,9 +1244,11 @@ RC RBFM_ScanIterator::prepareRecord(void *fetchedData, void *data){
 	}
 
 	//!! here may modify
-	selectNullIndicator[0] = base10NullBytes;
+	for(int i = 0; i<selectNullBytes;i++){
+		selectNullIndicator[i] = base10NullBytes[i];
+	}
 
-	memcpy( data, (char*)selectNullIndicator, selectNullBytes );
+	memcpy( data, selectNullIndicator, selectNullBytes );
 
 	free(selectNullIndicator);
 	return success;
@@ -1546,7 +1557,7 @@ RC RBFM_ScanIterator::readFullRecord(const RID &rid, void *data) {
     	
     	if( tmpRid.pageNum != pageNum )
     	{
-    		if( _fileHandlePtr->readPage(pageNum, tmpPage) == -1 )
+    		if( _fileHandlePtr->readPage(tmpRid.pageNum, tmpPage) == -1 )
     		{
     	    	free(tmpPage);
     			return -1;
@@ -1560,6 +1571,7 @@ RC RBFM_ScanIterator::readFullRecord(const RID &rid, void *data) {
     	pageOffset = slot.pageOffset;
     	tmpSize = slot.recordSize;
     	slotType = slot.slotType;
+    	cout<<"RRRslotType:"<<slotType<<"rid: "<<pageNum<<" "<<slotNum<<"record size:"<<tmpSize<<" page offset:"<<pageOffset<<endl;
     }
 
     // copy to dest

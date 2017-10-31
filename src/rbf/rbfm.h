@@ -17,7 +17,7 @@ typedef short int RecordMinLen;
 // MasterPointer means first pointer to point pointer
 // SlavePointer means pointer to pointer's pointer
 // DataPointer means the pointer point to data record
-typedef enum { Normal, Deleted, MasterPointer, SlavePointer, DataPointer } SlotType;
+typedef enum { Normal=0, Deleted, MasterPointer, SlavePointer, DataPointer } SlotType;
 
 // Record ID
 typedef struct

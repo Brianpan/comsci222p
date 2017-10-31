@@ -106,8 +106,6 @@ private:
 
   RecordBasedFileManager *rbfm; 
 
-
-  int VarCharToString(void *data, string &str);
   int GetFreeTableid();
   int getTableId(const string &tableName);
   int IsSystemTable(const string &tableName);
