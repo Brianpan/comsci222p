@@ -81,6 +81,7 @@ RC PagedFileManager::openFile(const string &fileName, FileHandle &fileHandle)
 	    	//cout<<"File not existed !"<<endl;
 			return -1;
 	}
+
 	// open file
 	// for here we should init
 	fileHandle._handler= new fstream();
@@ -95,7 +96,7 @@ RC PagedFileManager::closeFile(FileHandle &fileHandle)
 {
     if(fileHandle._handler == NULL)
     {
-    	cout<<"File not existed !"<<endl;
+//    	cout<<"File not existed !"<<endl;
     	return -1;
     }
 

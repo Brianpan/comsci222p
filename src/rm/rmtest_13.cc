@@ -79,7 +79,6 @@ int main()
 {
 	// Scan with conditions
     RC rcmain = createTable("tbl_b_employee4");
-    cout<<"~~"<<endl;
     rcmain = TEST_RM_13("tbl_b_employee4");
 
     return rcmain;

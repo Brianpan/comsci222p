@@ -171,8 +171,10 @@ protected:
 
 private:
   // prepare record accessory function
-  RC prepareRecord( const vector<Attribute> &recordDescriptor, unsigned int &localOffset, void **recordData, const void* data );
+  RC prepareRecord( const vector<Attribute> &recordDescriptor, unsigned int &localOffset, void *recordData, const void* data );
   RC updateSlotType(FileHandle &fileHandle, RID &rid, SlotType slotType);
+  // use for updating deleted slot page offset when updating record
+  RC updateDeletedSlotPageOffset( RecordMinLen slotNum, DIRECTORYSLOT &curSlot, RecordMinLen slotCount, void  *tmpPage );
 
   static RecordBasedFileManager *_rbf_manager;
   PagedFileManager *_pf_manager;
