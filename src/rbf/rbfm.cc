@@ -161,6 +161,7 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
 		}
 		else
 		{
+
 			// insert new slot
 			DIRECTORYSLOT *slot = (DIRECTORYSLOT *) malloc(sizeof(DIRECTORYSLOT));
 			slot->recordSize = localOffset;
@@ -187,7 +188,6 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
 
 		// write to page
 		fileHandle.writePage(pageNum, tmpPage);
-//		cout<<"PageNum:"<<pageNum<<" "<<"slotSize:"<<slotSize<<endl;
 	}
 
 	//free pointer and return
@@ -487,7 +487,7 @@ RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle, const vector<Att
 	// already delete
 	if( deletedRecordSlotType == Deleted )
 	{
-		return -1;
+		return 0;
 	}
 	// get slot num
 	RecordMinLen slotCount;
@@ -512,40 +512,61 @@ RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle, const vector<Att
 	// not the last slot
 	if( slotNum != (slotCount-1) )
 	{
-		DIRECTORYSLOT nextSlot, lastSlot;
-		memcpy( &nextSlot, (char*)tmpPage + getSlotOffset(slotNum+1), sizeof(DIRECTORYSLOT) );
-		int slotIdx = slotCount - 1;
-		// if last is deleted move back
+		DIRECTORYSLOT nextSlot;
+		int nextPivot = slotNum + 1;
 		do{
-			memcpy( &lastSlot, (char*)tmpPage + getSlotOffset(slotIdx), sizeof(DIRECTORYSLOT) );
-			slotIdx -= 1;
-		}while( lastSlot.slotType == Deleted && slotIdx >= (slotNum+1) );
+				memcpy( &nextSlot, (char*)tmpPage + getSlotOffset(nextPivot), sizeof(DIRECTORYSLOT) );
+				nextPivot += 1;
+		}while( nextSlot.slotType == Deleted && nextPivot < slotCount );
 
-		// the slotNum is the last available Slot
-		if( lastSlot.slotType != Deleted )
+		if( nextSlot.slotType != Deleted )
 		{
-			RecordMinLen shiftedLen = lastSlot.pageOffset + lastSlot.recordSize - nextSlot.pageOffset;
+			DIRECTORYSLOT lastSlot;
+			int slotIdx = slotCount - 1;
+			// if last is deleted move back
+			do{
+				memcpy( &lastSlot, (char*)tmpPage + getSlotOffset(slotIdx), sizeof(DIRECTORYSLOT) );
+				slotIdx -= 1;
+			}while( lastSlot.slotType == Deleted && slotIdx >= (slotNum+1) );
 
-			// from here add deletedRecordSize to memset 0
-			RecordMinLen shiftedResetOffset = lastSlot.pageOffset + lastSlot.recordSize - deletedRecordSize;
-
-			// shift pageOffset
-			memmove( (char*)tmpPage + deletedRecordOffset, (char*)tmpPage + nextSlot.pageOffset, shiftedLen );
-			memset( (char*)tmpPage + shiftedResetOffset, 0, deletedRecordSize );
-			// update slots after slotNum
-			RecordMinLen slotIter = slotNum + 1;
-			DIRECTORYSLOT s;
-			while( slotIter < slotCount )
+			// the slotNum is the last available Slot
+			if( lastSlot.slotType != Deleted )
 			{
-				memcpy( &s, (char*)tmpPage + getSlotOffset(slotIter), sizeof(DIRECTORYSLOT) );
-				if( s.slotType != Deleted )
+				RecordMinLen shiftedLen = lastSlot.pageOffset + lastSlot.recordSize - nextSlot.pageOffset;
+
+				// from here add deletedRecordSize to memset 0
+				RecordMinLen shiftedResetOffset = lastSlot.pageOffset + lastSlot.recordSize - deletedRecordSize;
+
+				// shift pageOffset
+				memmove( (char*)tmpPage + deletedRecordOffset, (char*)tmpPage + nextSlot.pageOffset, shiftedLen );
+				memset( (char*)tmpPage + shiftedResetOffset, 0, deletedRecordSize );
+				// update slots after slotNum
+				RecordMinLen slotIter = slotNum + 1;
+				DIRECTORYSLOT s;
+				while( slotIter < slotCount )
 				{
-					s.pageOffset -= deletedRecordSize;
-					memcpy( (char*)tmpPage + getSlotOffset(slotIter), &s, sizeof(DIRECTORYSLOT) );
+					memcpy( &s, (char*)tmpPage + getSlotOffset(slotIter), sizeof(DIRECTORYSLOT) );
+					if( s.slotType != Deleted )
+					{
+						s.pageOffset -= deletedRecordSize;
+						memcpy( (char*)tmpPage + getSlotOffset(slotIter), &s, sizeof(DIRECTORYSLOT) );
+					}
+					slotIter += 1;
 				}
-				slotIter += 1;
+			}
+			else
+			{
+				memset( (char*)tmpPage + deletedRecordOffset, 0, deletedRecordSize );
 			}
 		}
+		else
+		{
+			memset( (char*)tmpPage + deletedRecordOffset, 0, deletedRecordSize );
+		}
+	}
+	else
+	{
+	 	memset( (char*)tmpPage + deletedRecordOffset, 0, deletedRecordSize );
 	}
 
 	// clear slot and save
@@ -607,7 +628,7 @@ RC RecordBasedFileManager::updateRecord(FileHandle &fileHandle, const vector<Att
 	int maxPage = fileHandle.getNumberOfPages() - 1;
 	int pageNum = rid.pageNum;
 	int slotNum = rid.slotNum;
-	cout<<"rid:"<<pageNum<<" "<<slotNum<<endl;
+
 	void *tmpPage = malloc(PAGE_SIZE);
 
 	// definition
@@ -832,6 +853,8 @@ RC RecordBasedFileManager::updateRecord(FileHandle &fileHandle, const vector<Att
 	// free
 	free(recordData);
 	free(tmpPage);
+
+	cout<<"rid:"<<pageNum<<" "<<slotNum<<" slotCount:"<<slotCount<<endl;
 	return 0;
 }
 
@@ -1185,6 +1208,7 @@ RC RBFM_ScanIterator::getNextRecord(RID &rid, void *data){
 	_cursor.slotNum = tmpRid.slotNum+1;
 	if( !notScan )
 	{
+//		cout<<"pageNum: "<<pageNum<<"slotNum: "<<curTotalSlot<<endl;
 		_isFirstIter = false;
 		rid.pageNum = tmpRid.pageNum;
 		rid.slotNum = tmpRid.slotNum;
