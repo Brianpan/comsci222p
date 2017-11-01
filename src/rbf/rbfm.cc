@@ -157,7 +157,93 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
 			// use deleted slot
 			rid.pageNum = pageNum;
 			rid.slotNum = deletedPointer;
-			shouldUpdatePage = true;
+
+			DIRECTORYSLOT slot;
+			slot.slotType = Normal;
+			slot.recordSize = localOffset;
+
+			// traverse get page offset
+			if(deletedPointer == 0)
+			{
+				slot.pageOffset = 0;
+			}
+			else
+			{
+				int prevIdx = deletedPointer - 1;
+				DIRECTORYSLOT s;
+				while(prevIdx >=0)
+				{
+					memcpy( &s, (char*)tmpPage+getSlotOffset(prevIdx), sizeof(DIRECTORYSLOT) );
+					if( s.slotType != Deleted)
+						break;
+					prevIdx -= 1;
+				}
+				if(s.slotType != Deleted)
+				{
+					slot.pageOffset = s.pageOffset + s.recordSize;
+				}
+				else
+				{
+					slot.pageOffset = 0;
+				}
+			}
+			DIRECTORYSLOT nextSlot,lastSlot;
+			DIRECTORYSLOT s;
+			s.slotType = Deleted;
+
+			int nextIdx = deletedPointer + 1;
+			bool shouldMoveRecord = false;
+			while( nextIdx < slotSize )
+			{
+				memcpy( &s, (char*)tmpPage+getSlotOffset(nextIdx), sizeof(DIRECTORYSLOT) );
+				if(s.slotType != Deleted)
+				{
+					break;
+				}
+				nextIdx += 1;
+			}
+
+			if( s.slotType != Deleted )
+			{
+				nextSlot = s;
+				int lastIdx = slotSize - 1;
+
+				while(lastIdx > deletedPointer)
+				{
+					memcpy( &s, (char*)tmpPage+getSlotOffset(lastIdx), sizeof(DIRECTORYSLOT) );
+					if(s.slotType != Deleted)
+					{
+						break;
+					}
+					lastIdx -= 1;
+				}
+				lastSlot = s;
+
+				int shiftedRecordLen = lastSlot.pageOffset + lastSlot.recordSize - nextSlot.pageOffset;
+				memmove( (char*)tmpPage+slot.pageOffset+slot.recordSize, (char*)tmpPage+nextSlot.pageOffset, shiftedRecordLen );
+			}
+
+
+			// update deletedPointer
+			s.slotType = Normal;
+			RecordMinLen nextDeletedPointer = deletedPointer + 1;
+			while(nextDeletedPointer < slotSize)
+			{
+				memcpy( &s, (char*)tmpPage+getSlotOffset(nextDeletedPointer), sizeof(DIRECTORYSLOT) );
+				if(s.slotType == Deleted)
+					break;
+				nextDeletedPointer += 1;
+			}
+			if( s.slotType != Deleted )
+			{
+				nextDeletedPointer = -1;
+			}
+			memcpy( (char*)tmpPage + getDeletedPointerOffset(), &nextDeletedPointer, sizeof(RecordMinLen) );
+
+			// copy and set restSize
+			restSize -= localOffset;
+			memcpy( (char*)tmpPage + getSlotOffset(deletedPointer), &slot, sizeof(DIRECTORYSLOT) );
+			memcpy( (char*)tmpPage+slot.pageOffset, recordData, slot.recordSize );
 		}
 		else
 		{
@@ -169,7 +255,6 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
 			slot->slotType = Normal;
 
 			slotSize += 1;
-			cout<<"slave: recordsize"<<localOffset<<" last page offset:"<<lastSlot.pageOffset<<" last record size:"<<lastSlot.recordSize<<endl;
 			restSize -= (localOffset + sizeof(DIRECTORYSLOT) );
 			memcpy( (char*)tmpPage + getSlotOffset(slotSize-1), slot, sizeof(DIRECTORYSLOT) );
 			// copy recordData to page
@@ -194,10 +279,10 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
 	free(tmpPage);
 	free(recordData);
 	// update data when insert in deleted node
-	if( shouldUpdatePage )
-	{
-		updateRecord( fileHandle, recordDescriptor, data, rid );
-	}
+	// if( shouldUpdatePage )
+	// {
+	// 	updateRecord( fileHandle, recordDescriptor, data, rid );
+	// }
 	return 0;
 }
 
@@ -588,26 +673,27 @@ RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle, const vector<Att
 	// write page
 	fileHandle.writePage(pageNum, tmpPage);
 
+	fileHandle.readPage(pageNum, tmpPage);
+	memcpy(&tmpSlot, (char*)tmpPage+ getSlotOffset(slotNum), sizeof(DIRECTORYSLOT) );
+	cout<<"After DELETE READ PAGE TMP SLOT:"<<tmpSlot.pageOffset<<"slotType:"<<tmpSlot.slotType<<"size:"<<tmpSlot.recordSize<<endl;
 	// free
 	// free(tmpPage);
 
-	// cout deleted
-	cout<<"PageNum:"<<pageNum<<"slotNum:"<<slotNum<<"slotCount:"<<slotCount<<endl;
 	// if the record is pointer, it should delete recursively
 	if( shouldTreverseDeleteNode )
 	{
 		if( deleteRecord( fileHandle, recordDescriptor, treverseRid ) != 0 )
 			return -1;
 	}
-	if( fileHandle.readPage(pageNum, tmpPage) == 0)
-	{
-		memcpy(&slotCount, (char*)tmpPage+getSlotCountOffset(), sizeof(RecordMinLen) );
-		cout<<"After Recursive PageNum:"<<pageNum<<"slotNum:"<<slotNum<<"slotCount:"<<slotCount<<endl;
-	}
-	else{
-		cout<<"wrong"<<endl;
-		return -1;
-	}
+//	if( fileHandle.readPage(pageNum, tmpPage) == 0)
+//	{
+//		memcpy(&slotCount, (char*)tmpPage+getSlotCountOffset(), sizeof(RecordMinLen) );
+//		cout<<"After Recursive PageNum:"<<pageNum<<"slotNum:"<<slotNum<<"slotCount:"<<slotCount<<endl;
+//	}
+//	else{
+//		cout<<"wrong"<<endl;
+//		return -1;
+//	}
 	free(tmpPage);
 	return 0;
 }
