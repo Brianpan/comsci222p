@@ -580,7 +580,6 @@ RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle, const vector<Att
 	memcpy( &deletedPointer, (char*)tmpPage + getDeletedPointerOffset(), sizeof(RecordMinLen) );
 	RecordMinLen sNum = slotNum;
 
-//	cout<<"pageNum: "<<pageNum<<" sNum:"<<sNum<<endl;
 	if( deletedPointer == -1 || deletedPointer > sNum )
 	{
 		memcpy( (char*)tmpPage + getDeletedPointerOffset(), &sNum, sizeof(RecordMinLen) );
@@ -590,14 +589,26 @@ RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle, const vector<Att
 	fileHandle.writePage(pageNum, tmpPage);
 
 	// free
-	free(tmpPage);
+	// free(tmpPage);
 
+	// cout deleted
+	cout<<"PageNum:"<<pageNum<<"slotNum:"<<slotNum<<"slotCount:"<<slotCount<<endl;
 	// if the record is pointer, it should delete recursively
 	if( shouldTreverseDeleteNode )
 	{
 		if( deleteRecord( fileHandle, recordDescriptor, treverseRid ) != 0 )
 			return -1;
 	}
+	if( fileHandle.readPage(pageNum, tmpPage) == 0)
+	{
+		memcpy(&slotCount, (char*)tmpPage+getSlotCountOffset(), sizeof(RecordMinLen) );
+		cout<<"After Recursive PageNum:"<<pageNum<<"slotNum:"<<slotNum<<"slotCount:"<<slotCount<<endl;
+	}
+	else{
+		cout<<"wrong"<<endl;
+		return -1;
+	}
+	free(tmpPage);
 	return 0;
 }
 
@@ -1140,6 +1151,7 @@ RC RBFM_ScanIterator::getNextRecord(RID &rid, void *data){
 			{
 				return -1;
 			}
+			memcpy( &curTotalSlot, (char*)_tmpPage + getSlotCountOffset(), sizeof(RecordMinLen) );
 		}
 
 	}

@@ -608,8 +608,7 @@ RC RelationManager::deleteTuple(const string &tableName, const RID &rid)
 
 	if( _rbf_manager->deleteRecord( fileHandle, recordDescriptor, rid ) == 0 )
 	{
-		_rbf_manager->closeFile(fileHandle);
-		return 0;
+		return _rbf_manager->closeFile(fileHandle);
 	}
 
 	return -1;
