@@ -216,6 +216,17 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
 				}
 				lastSlot = s;
 
+				int nextIdx = deletedPointer + 1;
+				while(nextIdx<slotSize)
+				{
+					memcpy( &s, (char*)tmpPage+getSlotOffset(nextIdx), sizeof(DIRECTORYSLOT) );
+					if(s.slotType != Deleted)
+					{
+						s.pageOffset += slot.recordSize;
+						memcpy( (char*)tmpPage+getSlotOffset(nextIdx), &s, sizeof(DIRECTORYSLOT) );
+					}
+					nextIdx += 1;
+				}
 				int shiftedRecordLen = lastSlot.pageOffset + lastSlot.recordSize - nextSlot.pageOffset;
 				memmove( (char*)tmpPage+slot.pageOffset+slot.recordSize, (char*)tmpPage+nextSlot.pageOffset, shiftedRecordLen );
 			}
@@ -295,11 +306,7 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
 	//free pointer and return
 	free(tmpPage);
 	free(recordData);
-	// update data when insert in deleted node
-	// if( shouldUpdatePage )
-	// {
-	// 	updateRecord( fileHandle, recordDescriptor, data, rid );
-	// }
+
 	return 0;
 }
 
@@ -322,7 +329,6 @@ RC RecordBasedFileManager::readRecord(FileHandle &fileHandle, const vector<Attri
     RecordMinLen pageOffset =  slot.pageOffset;
     RecordMinLen tmpSize = slot.recordSize;
     SlotType slotType = slot.slotType;
-    cout<<"rid: "<<rid.pageNum<<" "<<rid.slotNum<<"record size:"<<tmpSize<<"page offset:"<<pageOffset<<endl;
     // record deleted
     if( slotType == Deleted )
     {
@@ -345,7 +351,6 @@ RC RecordBasedFileManager::readRecord(FileHandle &fileHandle, const vector<Attri
     	pageOffset = slot.pageOffset;
     	tmpSize = slot.recordSize;
     	slotType = slot.slotType;
-    	cout<<"rid: "<<pageNum<<" "<<slotNum<<"record size:"<<tmpSize<<"page offset:"<<pageOffset<<endl;
     }
 
     int nullBytes= getActualBytesForNullsIndicator( recordSize );
@@ -692,9 +697,8 @@ RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle, const vector<Att
 
 	fileHandle.readPage(pageNum, tmpPage);
 	memcpy(&tmpSlot, (char*)tmpPage+ getSlotOffset(slotNum), sizeof(DIRECTORYSLOT) );
-	cout<<"After DELETE READ PAGE TMP SLOT:"<<tmpSlot.pageOffset<<"slotType:"<<tmpSlot.slotType<<"size:"<<tmpSlot.recordSize<<endl;
 	// free
-	// free(tmpPage);
+	free(tmpPage);
 
 	// if the record is pointer, it should delete recursively
 	if( shouldTreverseDeleteNode )
@@ -702,16 +706,7 @@ RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle, const vector<Att
 		if( deleteRecord( fileHandle, recordDescriptor, treverseRid ) != 0 )
 			return -1;
 	}
-//	if( fileHandle.readPage(pageNum, tmpPage) == 0)
-//	{
-//		memcpy(&slotCount, (char*)tmpPage+getSlotCountOffset(), sizeof(RecordMinLen) );
-//		cout<<"After Recursive PageNum:"<<pageNum<<"slotNum:"<<slotNum<<"slotCount:"<<slotCount<<endl;
-//	}
-//	else{
-//		cout<<"wrong"<<endl;
-//		return -1;
-//	}
-	free(tmpPage);
+
 	return 0;
 }
 
@@ -914,10 +909,8 @@ RC RecordBasedFileManager::updateRecord(FileHandle &fileHandle, const vector<Att
 			free(recordData);
 			return -1;
 		}
-//		cout<<"slave: "<<slaveRid.pageNum<<","<<slaveRid.slotNum<<endl;
 		// update slaveRid's record SlotType
 		updateSlotType( fileHandle, slaveRid, DataPointer );
-		cout<<"slave: "<<slaveRid.pageNum<<","<<slaveRid.slotNum<<endl;
 
 		copySize = sizeof(RID);
 		restSize += originalRecordSize - sizeof(RID);
@@ -968,7 +961,6 @@ RC RecordBasedFileManager::updateRecord(FileHandle &fileHandle, const vector<Att
 	free(recordData);
 	free(tmpPage);
 
-	cout<<"rid:"<<pageNum<<" "<<slotNum<<" slotCount:"<<slotCount<<endl;
 	return 0;
 }
 
@@ -1323,7 +1315,6 @@ RC RBFM_ScanIterator::getNextRecord(RID &rid, void *data){
 	_cursor.slotNum = tmpRid.slotNum+1;
 	if( !notScan )
 	{
-//		cout<<"pageNum: "<<pageNum<<"slotNum: "<<curTotalSlot<<endl;
 		_isFirstIter = false;
 		rid.pageNum = tmpRid.pageNum;
 		rid.slotNum = tmpRid.slotNum;
@@ -1710,7 +1701,6 @@ RC RBFM_ScanIterator::readFullRecord(const RID &rid, void *data) {
     	pageOffset = slot.pageOffset;
     	tmpSize = slot.recordSize;
     	slotType = slot.slotType;
-    	cout<<"RRRslotType:"<<slotType<<"rid: "<<pageNum<<" "<<slotNum<<"record size:"<<tmpSize<<" page offset:"<<pageOffset<<endl;
     }
 
     // copy to dest

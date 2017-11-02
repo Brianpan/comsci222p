@@ -168,7 +168,6 @@ RC RelationManager::UpdateColumns(int tableid,vector<Attribute> attributes){
 	char *data=(char *)malloc(PAGE_SIZE);
 	vector<Attribute> columndescriptor;
 	RID rid;
-	cout<<"s"<<size<<endl;
 	PrepareCatalogDescriptor("Columns",columndescriptor);
 	if(_rbf_manager->openFile("Columns", table_filehandle)==0){
 
@@ -344,7 +343,7 @@ RC RelationManager::createTable(const string &tableName, const vector<Attribute>
 			PrepareCatalogDescriptor("Tables",tablesdescriptor);
 			CreateTablesRecord(data,tableid,tableName,0);
 			RC rc = _rbf_manager->insertRecord(filehandle,tablesdescriptor,data,rid);
-//			assert( rc == 0 && "insert table should not fail");
+			assert( rc == 0 && "insert table should not fail");
 			
 			//f("In createTable\n");
 			_rbf_manager->printRecord(tablesdescriptor,data);
@@ -563,9 +562,6 @@ int RelationManager::IsSystemTable(const string &tableName){
 			memcpy(&systemtable,(char *)data+1,sizeof(int));
 			count++;
 			break;
-//			if(count>=2){
-//				cout<<"There are two record in Tables with same table name "<<endl;
-//			}
 		}
 		rm_ScanIterator.close();
 		free(VarChardata);

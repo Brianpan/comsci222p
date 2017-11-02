@@ -31,7 +31,6 @@ private:
 public:
   RM_ScanIterator() {};
   ~RM_ScanIterator() {};
-  RBFM_ScanIterator rbfm_ScanIterator;
 
   RBFM_ScanIterator _rbf_scanIter;
 
