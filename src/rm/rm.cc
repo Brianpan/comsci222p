@@ -499,7 +499,7 @@ RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &at
 			int dataOffset=0;
 			memcpy(&size,(char *)data+offset,sizeof(int));
 			dataOffset=offset+sizeof(int);
-			char * dataVarChar=(char *) malloc(size);
+			char * dataVarChar=(char *) malloc(size+1);
 			memcpy(dataVarChar,(char *)data+dataOffset,size);
 			dataVarChar[size]='\0';
 			string tempString(dataVarChar);
@@ -524,8 +524,6 @@ RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &at
 			//null flag
 			memcpy(&(nullflag),data+offset,sizeof(int));
 			offset+=sizeof(int);
-
-			//cout<<"@@@"<<attr.name<<" "<<attr.type<<" "<<attr.length<<" "<<attr.position<<" "<<nullflag<<endl;
 
 			if(nullflag==1){
 				attr.length=0;

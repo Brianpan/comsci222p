@@ -1381,6 +1381,7 @@ RC RBFM_ScanIterator::prepareRecord(void *fetchedData, void *data){
 	memcpy( data, selectNullIndicator, selectNullBytes );
 
 	free(selectNullIndicator);
+	free(nullIndicator);
 	return success;
 }
 

@@ -228,7 +228,7 @@ void FileHandle::fetchFileData()
 
 		void *blankPage = malloc(PAGE_SIZE);
 		memcpy( blankPage, (void*)counter, sizeof(unsigned)*4 );
-
+		memset( (char*)blankPage+sizeof(unsigned)*4, 0, PAGE_SIZE-sizeof(unsigned)*4 );
 		_handler->write( (char*) blankPage, PAGE_SIZE );
 		free(blankPage);
 	}
