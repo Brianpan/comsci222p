@@ -146,9 +146,6 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
 		memcpy( &restSize, (char*)tmpPage + getRestSizeOffset(), sizeof(RecordMinLen) );
 		memcpy( &slotSize, (char*)tmpPage + getSlotCountOffset(), sizeof(RecordMinLen) );
 
-		DIRECTORYSLOT lastSlot;
-		memcpy( &lastSlot, (char*)tmpPage + getSlotOffset(slotSize-1), sizeof(DIRECTORYSLOT) );
-
 		//!!! get curr slotSize
 		RecordMinLen deletedPointer;
 		memcpy( &deletedPointer, (char*)tmpPage + getDeletedPointerOffset(), sizeof(RecordMinLen) );
@@ -248,12 +245,32 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
 		else
 		{
 
+			DIRECTORYSLOT lastSlot;
+			int lastPivot = slotSize-1;
+			lastSlot.slotType = Deleted;
+			while(lastPivot >= 0)
+			{
+				memcpy( &lastSlot, (char*)tmpPage + getSlotOffset(lastPivot), sizeof(DIRECTORYSLOT) );
+				if(lastSlot.slotType != Deleted)
+				{
+					break;
+				}
+				lastPivot -= 1;
+			}
+
 			// insert new slot
 			DIRECTORYSLOT *slot = (DIRECTORYSLOT *) malloc(sizeof(DIRECTORYSLOT));
 			slot->recordSize = localOffset;
-			slot->pageOffset = lastSlot.pageOffset + lastSlot.recordSize;
 			slot->slotType = Normal;
-
+			if(lastSlot.slotType != Deleted)
+			{
+				slot->pageOffset = lastSlot.pageOffset + lastSlot.recordSize;
+			}
+			else
+			{
+				slot->pageOffset = 0;
+			}
+			
 			slotSize += 1;
 			restSize -= (localOffset + sizeof(DIRECTORYSLOT) );
 			memcpy( (char*)tmpPage + getSlotOffset(slotSize-1), slot, sizeof(DIRECTORYSLOT) );

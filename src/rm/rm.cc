@@ -169,7 +169,7 @@ RC RelationManager::UpdateColumns(int tableid,vector<Attribute> attributes){
 	char *data=(char *)malloc(PAGE_SIZE);
 	vector<Attribute> columndescriptor;
 	RID rid;
-
+	cout<<"s"<<size<<endl;
 	PrepareCatalogDescriptor("Columns",columndescriptor);
 	if(rbfm->openFile("Columns", table_filehandle)==0){
 
@@ -469,6 +469,9 @@ RC RelationManager::deleteTable(const string &tableName)
 }
 
 //modified
+bool sortAttr(Attribute a, Attribute b){
+	return (a.position < b.position);
+}
 RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &attrs)
 {
 
@@ -534,6 +537,8 @@ RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &at
 			attrs.push_back(attr);
 
 		}
+
+		sort(attrs.begin(), attrs.end(), sortAttr);
 		rm_ScanIterator.close();
 		free(data);
 		return 0;

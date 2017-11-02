@@ -13,7 +13,7 @@
 using namespace std;
 
 
-typedef int RecordMinLen;
+typedef short int RecordMinLen;
 // MasterPointer means first pointer to point pointer
 // SlavePointer means pointer to pointer's pointer
 // DataPointer means the pointer point to data record

@@ -2,7 +2,36 @@
 
 RC TEST_RM_13(const string &tableName)
 {
-    // Functions Tested:
+    cout<<endl<<"****** Print Columns after Create Table *******"<<endl;
+    RM_ScanIterator rmsi2;
+    RID rr;
+    RC t;
+    void *returnedData2 = malloc(PAGE_SIZE);
+    string c = "Columns";
+    vector<string> cs;
+    vector<Attribute> col_attr;
+    rm->PrepareCatalogDescriptor("Columns", col_attr);
+    cs.push_back("table-id");
+    cs.push_back("column-name");
+    cs.push_back("column-type");
+    cs.push_back("column-length");
+    cs.push_back("column-position");
+    cs.push_back("NullFlag");
+    t = rm->scan(c, "", NO_OP, NULL, cs, rmsi2);
+    if(t != 0)
+    {
+    	cout<<"Something wrong~";
+    }
+    else
+    {
+    	while( rmsi2.getNextTuple(rr, returnedData2) != RM_EOF )
+    	{
+    		rm->printTuple(col_attr, returnedData2);
+    	}
+    }
+    rmsi2.close();
+    free(returnedData2);
+	// Functions Tested:
     // 1. Conditional scan
     cout << endl << "***** In RM Test Case 13 *****" << endl;
 

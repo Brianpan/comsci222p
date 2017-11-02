@@ -85,6 +85,7 @@ public:
       RM_ScanIterator &rm_ScanIterator);
   RC printTable(const string &tableName);
 
+  RC PrepareCatalogDescriptor(string tablename,vector<Attribute> &attributes);
 // Extra credit work (10 points)
 public:
   RC dropAttribute(const string &tableName, const string &attributeName);
@@ -112,10 +113,11 @@ private:
   RC UpdateColumns(int tableid,vector<Attribute> attributes);
   RC CreateVarChar(void *data,const string &str);
 
-  RC PrepareCatalogDescriptor(string tablename,vector<Attribute> &attributes);
+
   RC CreateTablesRecord(void *data,int tableid,string tablename,int systemtable);
   RC CreateColumnsRecord(void * data,int tableid, Attribute attr, int position, int nullflag);
  
 };
 
+bool sortAttr(Attribute a, Attribute b);
 #endif
