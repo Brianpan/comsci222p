@@ -90,9 +90,7 @@ public:
   RC dropAttribute(const string &tableName, const string &attributeName);
 
   RC addAttribute(const string &tableName, const Attribute &attr);
-
-  FileHandle *_fileHandle;
-  string _tableName;
+  int getTableId(const string &tableName);
 
 protected:
   RelationManager();
@@ -100,14 +98,9 @@ protected:
 
 private:
   static RelationManager *_rm;
-
-
   RecordBasedFileManager *_rbf_manager;
 
-//  RecordBasedFileManager *rbfm;
-
   int GetFreeTableid();
-  int getTableId(const string &tableName);
   int IsSystemTable(const string &tableName);
   RC UpdateColumns(int tableid,vector<Attribute> attributes);
   RC CreateVarChar(void *data,const string &str);
