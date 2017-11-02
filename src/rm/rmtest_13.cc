@@ -26,6 +26,7 @@ RC TEST_RM_13(const string &tableName)
     {
     	while( rmsi2.getNextTuple(rr, returnedData2) != RM_EOF )
     	{
+    		cout<<"rid"<<rr.pageNum<<"slot"<<rr.slotNum<<endl;
     		rm->printTuple(col_attr, returnedData2);
     	}
     }

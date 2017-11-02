@@ -164,23 +164,22 @@ RC RelationManager::CreateColumnsRecord(void * data,int tableid, Attribute attr,
 }
 RC RelationManager::UpdateColumns(int tableid,vector<Attribute> attributes){
 	int size=attributes.size();
-	RecordBasedFileManager *rbfm=RecordBasedFileManager::instance();
 	FileHandle table_filehandle;
 	char *data=(char *)malloc(PAGE_SIZE);
 	vector<Attribute> columndescriptor;
 	RID rid;
 	cout<<"s"<<size<<endl;
 	PrepareCatalogDescriptor("Columns",columndescriptor);
-	if(rbfm->openFile("Columns", table_filehandle)==0){
+	if(_rbf_manager->openFile("Columns", table_filehandle)==0){
 
 		for(int i=0;i<size;i++){
 			CreateColumnsRecord(data,tableid,attributes[i],attributes[i].position,0);
-			rbfm->insertRecord(table_filehandle,columndescriptor,data,rid);
+			_rbf_manager->insertRecord(table_filehandle,columndescriptor,data,rid);
 			
 			////f("In UpdateColumns\n");
-			rbfm->printRecord(columndescriptor,data);
+			_rbf_manager->printRecord(columndescriptor,data);
 		}
-		rbfm->closeFile(table_filehandle);
+		_rbf_manager->closeFile(table_filehandle);
 		free(data);
 		return 0;
 	}
@@ -256,7 +255,7 @@ RelationManager* RelationManager::instance()
 RelationManager::RelationManager()
 {  
 //    debug = true;
-	rbfm = RecordBasedFileManager::instance();
+	_rbf_manager = RecordBasedFileManager::instance();
 	_fileHandle = new FileHandle;
 }
 
@@ -271,35 +270,34 @@ RC RelationManager::createCatalog()
 	vector<Attribute> tablesdescriptor;
 	vector<Attribute> columnsdescriptor;
 
-	RecordBasedFileManager *rbfm=RecordBasedFileManager::instance();
 	FileHandle table_filehandle;
 	RID rid;
 
 
 	//create Tables
-	if((rbfm->createFile("Tables"))==0){
+	if((_rbf_manager->createFile("Tables"))==0){
 
 		void *data=malloc(PAGE_SIZE);
 		int tableid=1;
 		int systemtable=1;
 
 		// open table file 
-		rbfm->openFile("Tables",table_filehandle);
+		_rbf_manager->openFile("Tables",table_filehandle);
 		
 		PrepareCatalogDescriptor("Tables",tablesdescriptor);
 		CreateTablesRecord(data,tableid,"Tables",systemtable);
-		RC rc = rbfm->insertRecord(table_filehandle,tablesdescriptor,data,rid);
+		RC rc = _rbf_manager->insertRecord(table_filehandle,tablesdescriptor,data,rid);
 		assert( rc == 0 && "insert table should not fail");
 		
 		tableid=2;
 		CreateTablesRecord(data,tableid,"Columns",systemtable);
-		rc = rbfm->insertRecord(table_filehandle,tablesdescriptor,data,rid);
+		rc = _rbf_manager->insertRecord(table_filehandle,tablesdescriptor,data,rid);
 		assert( rc == 0 && "insert table should not fail");
 		// close table file
-		rbfm->closeFile(table_filehandle);
+		_rbf_manager->closeFile(table_filehandle);
 
 		//create Columns
-		if((rbfm->createFile("Columns"))==0){
+		if((_rbf_manager->createFile("Columns"))==0){
 			UpdateColumns(1,tablesdescriptor);
 			PrepareCatalogDescriptor("Columns",columnsdescriptor);
 			UpdateColumns(tableid,columnsdescriptor);
@@ -315,8 +313,8 @@ RC RelationManager::createCatalog()
 RC RelationManager::deleteCatalog()
 {
 
-	if(rbfm->destroyFile("Tables")==0){
-		if(rbfm->destroyFile("Columns")==0){
+	if(_rbf_manager->destroyFile("Tables")==0){
+		if(_rbf_manager->destroyFile("Columns")==0){
 			return 0;
 		}
 	}
@@ -325,7 +323,6 @@ RC RelationManager::deleteCatalog()
 
 RC RelationManager::createTable(const string &tableName, const vector<Attribute> &attrs)
 {
-	RecordBasedFileManager *rbfm=RecordBasedFileManager::instance();
 	FileHandle filehandle;
 	FileHandle nullhandle;
 	vector<Attribute> tablesdescriptor;
@@ -336,23 +333,23 @@ RC RelationManager::createTable(const string &tableName, const vector<Attribute>
 	for(int i=0;i< tempattrs.size();i++){
 		tempattrs[i].position=i+1;
 	}
-	if(rbfm->createFile(tableName)==0){
+	if(_rbf_manager->createFile(tableName)==0){
 
 
-		if(rbfm->openFile("Tables",filehandle)==0){
+		if(_rbf_manager->openFile("Tables",filehandle)==0){
 			//f("before get free table id \n");
 			tableid=GetFreeTableid();
 			//f("table id is %d\n",tableid);
 			
 			PrepareCatalogDescriptor("Tables",tablesdescriptor);
 			CreateTablesRecord(data,tableid,tableName,0);
-			RC rc = rbfm->insertRecord(filehandle,tablesdescriptor,data,rid);
-			assert( rc == 0 && "insert table should not fail");
+			RC rc = _rbf_manager->insertRecord(filehandle,tablesdescriptor,data,rid);
+//			assert( rc == 0 && "insert table should not fail");
 			
 			//f("In createTable\n");
-			rbfm->printRecord(tablesdescriptor,data);
+			_rbf_manager->printRecord(tablesdescriptor,data);
 				
-			rbfm->closeFile(filehandle);
+			_rbf_manager->closeFile(filehandle);
 			if(UpdateColumns(tableid,tempattrs)==0){
 				free(data);
 				return 0;
@@ -426,31 +423,31 @@ RC RelationManager::deleteTable(const string &tableName)
 	vector<Attribute> columnsdescriptor;
 	PrepareCatalogDescriptor("Columns",columnsdescriptor);
 	if(tableName.compare("Tables") && tableName.compare("Columns")){
-		if(rbfm->destroyFile(tableName)==0){
+		if(_rbf_manager->destroyFile(tableName)==0){
 			tableid=getTableId(tableName);
 
 			//f("\n\nDelete table id %d\n",tableid);
 
-			rbfm->openFile("Tables",filehandle);
+			_rbf_manager->openFile("Tables",filehandle);
 
 			if(RelationManager::scan("Tables","table-id",EQ_OP,&tableid,attrname,rm_ScanIterator)==0){
 				while(rm_ScanIterator.getNextTuple(rid,data)!=RM_EOF){
 					rids.push_back(rid);
 				}
 				for(int j=0;j<rids.size();j++){
-					rbfm->deleteRecord(filehandle,tablesdescriptor,rids[j]);
+					_rbf_manager->deleteRecord(filehandle,tablesdescriptor,rids[j]);
 
 				}
-				rbfm->closeFile(filehandle);
+				_rbf_manager->closeFile(filehandle);
 				rm_ScanIterator.close();
 
-				rbfm->openFile("Columns",filehandle);
+				_rbf_manager->openFile("Columns",filehandle);
 				if( scan("Columns","table-id",EQ_OP,&tableid,attrname,rm_ScanIterator2) == 0 ){
 					while(rm_ScanIterator2.getNextTuple(rid,data)!=RM_EOF){
-						rbfm->deleteRecord(filehandle,columnsdescriptor,rid);
+						_rbf_manager->deleteRecord(filehandle,columnsdescriptor,rid);
 					}
 					rm_ScanIterator2.close();
-					rbfm->closeFile(filehandle);
+					_rbf_manager->closeFile(filehandle);
 
 					free(data);
 					//f("Successfully delete %s\n",tableName.c_str());

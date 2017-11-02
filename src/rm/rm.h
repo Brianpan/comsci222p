@@ -105,7 +105,7 @@ private:
 
   RecordBasedFileManager *_rbf_manager;
 
-  RecordBasedFileManager *rbfm; 
+//  RecordBasedFileManager *rbfm;
 
   int GetFreeTableid();
   int getTableId(const string &tableName);
