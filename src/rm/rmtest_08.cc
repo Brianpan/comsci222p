@@ -9,7 +9,7 @@ RC TEST_RM_8(const string &tableName, vector<RID> &rids, vector<int> &sizes)
 
     RID rid; 
     void *tuple = malloc(4000);
-    int numTuples = 300;
+    int numTuples = 2000;
 
     // GetAttributes
     vector<Attribute> attrs;
@@ -27,9 +27,10 @@ RC TEST_RM_8(const string &tableName, vector<RID> &rids, vector<int> &sizes)
         int size = 0;
         memset(tuple, 0, 2000);
         prepareLargeTuple(attrs.size(), nullsIndicator, i, tuple, &size);
+
         rc = rm->insertTuple(tableName, tuple, rid);
         assert(rc == success && "RelationManager::insertTuple() should not fail.");
-        cout<<"i:"<<i<<"size:"<<size<<" rid:"<<" "<<rid.pageNum<<" "<<rid.slotNum<<endl;
+
         rids.push_back(rid);
         sizes.push_back(size);        
     }

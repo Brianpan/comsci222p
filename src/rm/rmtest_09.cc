@@ -7,7 +7,7 @@ RC TEST_RM_09(const string &tableName, vector<RID> &rids, vector<int> &sizes)
     cout << "***** In RM Test case 9 *****" << endl;
 
     int size = 0;
-    int numTuples = 300;
+    int numTuples = 2000;
     void *tuple = malloc(4000);
     void *returnedData = malloc(4000);
     
@@ -33,14 +33,14 @@ RC TEST_RM_09(const string &tableName, vector<RID> &rids, vector<int> &sizes)
 
         size = 0;
         prepareLargeTuple(attrs.size(), nullsIndicator, i, tuple, &size);
-//        if(memcmp(returnedData, tuple, sizes[i]) != 0)
-//        {
-//            cout << "***** [FAIL] Test Case 9 Failed *****" << endl << endl;
-//            free(tuple);
-//            free(returnedData);
-//            free(nullsIndicator);
-//            return -1;
-//        }
+        if(memcmp(returnedData, tuple, sizes[i]) != 0)
+        {
+            cout << "***** [FAIL] Test Case 9 Failed *****" << endl << endl;
+            free(tuple);
+            free(returnedData);
+            free(nullsIndicator);
+            return -1;
+        }
     }
 
     free(tuple);
