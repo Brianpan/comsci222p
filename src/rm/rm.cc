@@ -587,6 +587,7 @@ RC RelationManager::insertTuple(const string &tableName, const void *data, RID &
 		return 0;
 	}
 
+	_rbf_manager->closeFile(fileHandle);
 	return -1;
 }
 
@@ -624,6 +625,7 @@ RC RelationManager::updateTuple(const string &tableName, const void *data, const
 		return 0;
 	}
 
+	_rbf_manager->closeFile(fileHandle);
 	return -1;
 }
 
@@ -638,6 +640,7 @@ RC RelationManager::readTuple(const string &tableName, const RID &rid, void *dat
 		return -1;
 
 	if ( _rbf_manager->readRecord( fileHandle, recordDescriptor, rid, data ) != 0 )
+		_rbf_manager->closeFile(fileHandle);
 		return -1;
 
 	_rbf_manager->closeFile(fileHandle);
@@ -667,6 +670,8 @@ RC RelationManager::readAttribute(const string &tableName, const RID &rid, const
 		_rbf_manager->closeFile(fileHandle);
 		return 0;
 	}
+
+	_rbf_manager->closeFile(fileHandle);
 	return -1;
 }
 
