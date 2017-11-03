@@ -457,7 +457,8 @@ RC RelationManager::deleteTable(const string &tableName)
 
 		}
 	}
-//	assert( false &&"There is bug on deleteTable ");
+
+	_rbf_manager->closeFile(filehandle);
 	free(data);
 	return -1;
 }
@@ -606,6 +607,7 @@ RC RelationManager::deleteTuple(const string &tableName, const RID &rid)
 		return _rbf_manager->closeFile(fileHandle);
 	}
 
+	_rbf_manager->closeFile(fileHandle);
 	return -1;
 }
 
@@ -640,9 +642,10 @@ RC RelationManager::readTuple(const string &tableName, const RID &rid, void *dat
 		return -1;
 
 	if ( _rbf_manager->readRecord( fileHandle, recordDescriptor, rid, data ) != 0 )
+	{
 		_rbf_manager->closeFile(fileHandle);
 		return -1;
-
+	}
 	_rbf_manager->closeFile(fileHandle);
 	return 0;
 }
