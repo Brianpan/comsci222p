@@ -1196,12 +1196,10 @@ RBFM_ScanIterator::RBFM_ScanIterator(){
 }
 
 RBFM_ScanIterator::~RBFM_ScanIterator(){
-
-	_fileHandlePtr = NULL;
 }
 
 RC RBFM_ScanIterator::close(){
-	_fileHandlePtr->_handler->close();
+//	_fileHandlePtr->_handler->close();
 	free(_tmpPage);
 	return 0;
 }

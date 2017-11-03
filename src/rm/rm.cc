@@ -776,6 +776,10 @@ RC RM_ScanIterator::getNextTuple(RID &rid, void *data){
 }
 
 RC RM_ScanIterator::close(){
+//	_fileHandle._handler->close();
+//	RecordBasedFileManager::closeFile(_fileHandle);
+	RecordBasedFileManager* rbf = RecordBasedFileManager::instance();
+	rbf->closeFile(_fileHandle);
 	return _rbf_scanIter.close();
 }
 
