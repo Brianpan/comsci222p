@@ -185,7 +185,7 @@ inline unsigned getSlotOffset(int slotNum);
 inline unsigned getSlotCountOffset();
 inline unsigned getRestSizeOffset();
 inline unsigned getDeletedPointerOffset();
-inline unsigned getDirectorySize();
+inline unsigned getDirectorySize(RecordMinLen slotCount);
 
 inline unsigned getNullBytesOffset();
 

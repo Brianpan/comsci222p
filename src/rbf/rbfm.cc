@@ -108,7 +108,7 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
 		slot->slotType = Normal;
 		// create for storing rest of the bytes
 		// 3 * 2bytes (1 for note rest of bytes, one for number of slot, one for deletedPointer)
-		unsigned int directorySize = getDirectorySize();
+		unsigned int directorySize = getDirectorySize(1);
 		RecordMinLen restSize = PAGE_SIZE - directorySize - localOffset;
 		RecordMinLen slotSize = 1;
 		RecordMinLen deletedPointer = -1;
@@ -467,8 +467,8 @@ inline unsigned getDeletedPointerOffset() {
 	return ( PAGE_SIZE - 3*sizeof(RecordMinLen) );
 }
 
-inline unsigned getDirectorySize() {
-	return ( sizeof(DIRECTORYSLOT) + 3*sizeof(RecordMinLen) );
+inline unsigned getDirectorySize(RecordMinLen slotCount) {
+	return ( sizeof(DIRECTORYSLOT)*slotCount + 3*sizeof(RecordMinLen) );
 }
 
 inline unsigned getNullBytesOffset() {
