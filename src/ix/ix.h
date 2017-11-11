@@ -21,9 +21,16 @@ typedef struct {
 
 typedef struct {
     IDX_PAGE_POINTER_TYPE pageNum;
+    IDX_PAGE_POINTER_TYPE curPageNum;
     int indexId;
     bool left = 0;
 } INDEXPOINTER;
+
+template<class T>
+typedef struct {
+    T key;
+    RID rid;
+} LEAFNODE;
 
 class IX_ScanIterator;
 class IXFileHandle;
@@ -48,7 +55,7 @@ class IndexManager {
         // Insert an entry into the given index that is indicated by the given ixfileHandle.
         RC insertEntry(IXFileHandle &ixfileHandle, const Attribute &attribute, const void *key, const RID &rid);
         template<class T>
-        RC insertFixedLengthEntry(IXFileHandle &ixfileHandle, AttrType idxAttrType, const void *key, const RID &rid);
+        RC insertFixedLengthEntry(IXFileHandle &ixfileHandle, const void *key, const RID &rid);
         RC insertVarLengthEntry(IXFileHandle &ixfileHandle, const void *key, const RID &rid);
 
         // Delete an entry from the given index that is indicated by the given ixfileHandle.
@@ -67,7 +74,11 @@ class IndexManager {
         void printBtree(IXFileHandle &ixfileHandle, const Attribute &attribute) const;
 
         template<class T>
-        INDEXPOINTER searchFixedIntermediatePage(T keyValue, const void *idxPage, RecordMinLen head, RecordMinLen tail);
+        INDEXPOINTER searchFixedIntermediateNode(T keyValue, int curPageId, const void *idxPage, RecordMinLen head, RecordMinLen tail);
+        template<class T>
+        RC insertLeafNode(T keyValue, const RID &rid, int leafPageId, void *data, RecordMinLen slotCount);
+        template<class T>
+        IDX_PAGE_POINTER_TYPE searchFixedLeafNode(T keyValue, void *data, RecordMinLen slotCount);
     protected:
         IndexManager();
         ~IndexManager();
@@ -75,10 +86,11 @@ class IndexManager {
     private:
         static IndexManager *_index_manager;
 
-        RC createFixedNewLeafNode(void *data, const void *key);
+        RC createFixedNewLeafNode(void *data, const void *key, const RID &rid);
         template<class T>
-        int traverseFixedLengthNode(IXFileHandle &ixfileHandle, T keyValue, void *idxPage, vector<INDEXPOINTER> &traversePointerList);
+        int traverseFixedLengthNode(IXFileHandle &ixfileHandle, T keyValue, int &curPageId, void *idxPage, vector<INDEXPOINTER> &traversePointerList);
         
+        RC updateParentPointer( IXFileHandle ixfileHandle, INDEXPOINTER indexPointer, IDX_PAGE_POINTER_TYPE pageNum );
 };
 
 
@@ -138,12 +150,19 @@ inline unsigned getIndexSlotCountOffset();
 inline unsigned getNodeTypeOffset();
 
 inline unsigned getLeafNodeRightPointerOffset();
+
 // for tree offset
 inline unsigned getFixedKeyInsertOffset( unsigned idx );
+
 // intermediate node
 inline unsigned getFixedKeyOffset( unsigned idx );
+
 // use pointer index offset |p0| k0 |p1| k1 |p2|
 inline unsigned getFixedKeyPointerOffset( unsigned idx );
+
 // the size of each insert fixed key
 inline unsigned getFixedKeySize();
+
+// the size of each index value of fixed size data type
+inline unsigned getFixedValueSize();
 #endif

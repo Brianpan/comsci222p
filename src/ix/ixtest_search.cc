@@ -12,12 +12,7 @@ IndexManager *indexManager;
 RC testCase_Search(const string &indexFileName)
 {
     // Functions tested
-    // 1. Create Index File **
-    // 2. Open Index File **
-    // 3. Create Index File -- when index file is already created **
-    // 4. Open Index File ** -- when a file handle is already opened **
-    // 5. Close Index File **
-    // NOTE: "**" signifies the new functions being tested in this test case.
+
     cerr << endl << "***** In IX Test Case search *****" << endl;
 
     // create index file
@@ -49,8 +44,9 @@ RC testCase_Search(const string &indexFileName)
         memcpy( (char*)tmpPage+getFixedKeyOffset(idx), &nodeValue, sizeof(int) );
     }
     int k = 27;
+    int curPageId = 0;
 
-    INDEXPOINTER r0 = indexManager->searchFixedIntermediatePage<int>(k, tmpPage, 0, intermediateNodes);
+    INDEXPOINTER r0 = indexManager->searchFixedIntermediatePage<int>(k, curPageId, tmpPage, 0, intermediateNodes);
 
     INDEXPOINTER a0;
     a0.pageNum = 23;
@@ -59,14 +55,14 @@ RC testCase_Search(const string &indexFileName)
     assert( (a0.pageNum == r0.pageNum) && (a0.left == r0.left) && (a0.indexId == r0.indexId) && "Search 0 failed !" );
     
     k = 9;
-    r0 = indexManager->searchFixedIntermediatePage<int>(k, tmpPage, 0, intermediateNodes);
+    r0 = indexManager->searchFixedIntermediatePage<int>(k, curPageId, tmpPage, 0, intermediateNodes);
     a0.pageNum = 11;
     a0.left = 1;
     a0.indexId = 0;
     assert( (a0.pageNum == r0.pageNum) && (a0.left == r0.left) && (a0.indexId == r0.indexId) && "Search 0 failed !" );
 
     k = 14;
-    r0 = indexManager->searchFixedIntermediatePage<int>(k, tmpPage, 0, intermediateNodes);
+    r0 = indexManager->searchFixedIntermediatePage<int>(k, curPageId, tmpPage, 0, intermediateNodes);
     a0.pageNum = 15;
     a0.left = 0;
     a0.indexId = 2;
