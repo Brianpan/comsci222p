@@ -46,7 +46,7 @@ RC testCase_Search(const string &indexFileName)
     int k = 27;
     int curPageId = 0;
 
-    INDEXPOINTER r0 = indexManager->searchFixedIntermediatePage<int>(k, curPageId, tmpPage, 0, intermediateNodes);
+    INDEXPOINTER r0 = indexManager->searchFixedIntermediateNode<int>(k, curPageId, tmpPage, 0, intermediateNodes);
 
     INDEXPOINTER a0;
     a0.pageNum = 23;
@@ -55,14 +55,14 @@ RC testCase_Search(const string &indexFileName)
     assert( (a0.pageNum == r0.pageNum) && (a0.left == r0.left) && (a0.indexId == r0.indexId) && "Search 0 failed !" );
     
     k = 9;
-    r0 = indexManager->searchFixedIntermediatePage<int>(k, curPageId, tmpPage, 0, intermediateNodes);
+    r0 = indexManager->searchFixedIntermediateNode<int>(k, curPageId, tmpPage, 0, intermediateNodes);
     a0.pageNum = 11;
     a0.left = 1;
     a0.indexId = 0;
     assert( (a0.pageNum == r0.pageNum) && (a0.left == r0.left) && (a0.indexId == r0.indexId) && "Search 0 failed !" );
 
     k = 14;
-    r0 = indexManager->searchFixedIntermediatePage<int>(k, curPageId, tmpPage, 0, intermediateNodes);
+    r0 = indexManager->searchFixedIntermediateNode<int>(k, curPageId, tmpPage, 0, intermediateNodes);
     a0.pageNum = 15;
     a0.left = 0;
     a0.indexId = 2;

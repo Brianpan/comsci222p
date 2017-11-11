@@ -26,11 +26,11 @@ typedef struct {
     bool left = 0;
 } INDEXPOINTER;
 
-template<class T>
-typedef struct {
+template<typename T>
+struct LEAFNODE{
     T key;
     RID rid;
-} LEAFNODE;
+};
 
 class IX_ScanIterator;
 class IXFileHandle;
@@ -76,9 +76,12 @@ class IndexManager {
         template<class T>
         INDEXPOINTER searchFixedIntermediateNode(T keyValue, int curPageId, const void *idxPage, RecordMinLen head, RecordMinLen tail);
         template<class T>
-        RC insertLeafNode(T keyValue, const RID &rid, int leafPageId, void *data, RecordMinLen slotCount);
+        RC insertLeafNode(T keyValue, const RID &rid, void *data, RecordMinLen slotCount);
         template<class T>
         IDX_PAGE_POINTER_TYPE searchFixedLeafNode(T keyValue, void *data, RecordMinLen slotCount);
+
+        template<class T>
+        RC splitFixedLeafNode(IXFileHandle ixfileHandle, int curPageId, T keyValue, const RID &rid, T &upwardKey, void *curPage, void *newPage);
     protected:
         IndexManager();
         ~IndexManager();
@@ -91,6 +94,9 @@ class IndexManager {
         int traverseFixedLengthNode(IXFileHandle &ixfileHandle, T keyValue, int &curPageId, void *idxPage, vector<INDEXPOINTER> &traversePointerList);
         
         RC updateParentPointer( IXFileHandle ixfileHandle, INDEXPOINTER indexPointer, IDX_PAGE_POINTER_TYPE pageNum );
+
+        template<class T>
+        bool compareKey(T keyValue, T toCompareValue);
 };
 
 
@@ -151,6 +157,10 @@ inline unsigned getNodeTypeOffset();
 
 inline unsigned getLeafNodeRightPointerOffset();
 
+
+// the size of each index value of fixed size data type
+inline unsigned getFixedIndexSize();
+
 // for tree offset
 inline unsigned getFixedKeyInsertOffset( unsigned idx );
 
@@ -163,6 +173,6 @@ inline unsigned getFixedKeyPointerOffset( unsigned idx );
 // the size of each insert fixed key
 inline unsigned getFixedKeySize();
 
-// the size of each index value of fixed size data type
-inline unsigned getFixedValueSize();
+// the dir size of leaf node
+inline unsigned getLeafNodeDirSize();
 #endif
