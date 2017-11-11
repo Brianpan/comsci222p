@@ -297,6 +297,11 @@ INDEXPOINTER IndexManager::searchFixedIntermediatePage(T keyValue, const void *i
     				break;
     			}
     		}
+    		if( mid == (tail - 1) )
+    		{
+    		    head = mid;
+    		    break;
+    		}
             head = mid + 1;
     	}
         else

@@ -66,6 +66,8 @@ class IndexManager {
         // Print the B+ tree in pre-order (in a JSON record format)
         void printBtree(IXFileHandle &ixfileHandle, const Attribute &attribute) const;
 
+        template<class T>
+        INDEXPOINTER searchFixedIntermediatePage(T keyValue, const void *idxPage, RecordMinLen head, RecordMinLen tail);
     protected:
         IndexManager();
         ~IndexManager();
@@ -76,8 +78,7 @@ class IndexManager {
         RC createFixedNewLeafNode(void *data, const void *key);
         template<class T>
         int traverseFixedLengthNode(IXFileHandle &ixfileHandle, T keyValue, void *idxPage, vector<INDEXPOINTER> &traversePointerList);
-        template<class T>
-        INDEXPOINTER searchFixedIntermediatePage(T keyValue, const void *idxPage, RecordMinLen head, RecordMinLen tail);
+        
 };
 
 
