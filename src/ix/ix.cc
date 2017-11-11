@@ -509,7 +509,9 @@ RC IndexManager::splitFixedLeafNode(IXFileHandle ixfileHandle, int curPageId, T 
 
     // move data
     memcpy( newPage, (char*)dataList+mid*sizeof(LEAFNODE<T>), moveSize );
-    
+
+    // clear data in cur page
+    memset( (char*)curPage+mid*sizeof(LEAFNODE<T>), 0, moveSize);
     
     // copy new page id to curPage
     // not yet append 
