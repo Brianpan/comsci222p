@@ -55,6 +55,7 @@ RC testCase_Split_Leafnode(const string &indexFileName)
     // start insert
     void *newPage = malloc(PAGE_SIZE);
     int curPageId = ixfileHandle.getNumberOfPages() - 1;
+    int newPageId;
 
     int k = 21;
     int upwardKey;
@@ -62,7 +63,7 @@ RC testCase_Split_Leafnode(const string &indexFileName)
     RC flag;
     tmpRid.pageNum = 1;
     tmpRid.slotNum = 0;
-    flag = indexManager->splitFixedLeafNode<int>( ixfileHandle, curPageId, k, tmpRid, upwardKey, tmpPage, newPage);
+    flag = indexManager->splitFixedLeafNode<int>( ixfileHandle, curPageId, newPageId, k, tmpRid, upwardKey, tmpPage, newPage);
     assert(flag == success && "split failed !");
 
     // print two nodes
@@ -87,6 +88,8 @@ RC testCase_Split_Leafnode(const string &indexFileName)
     }
 
     cout<<"upwardKey:"<<upwardKey<<endl;
+    cout<<"New page id:"<<newPageId<<endl;
+
     assert(upwardKey == 20 && "wrong upwardKey !");
 
     // close index file

@@ -123,28 +123,6 @@ RC IndexManager::insertFixedLengthEntry(IXFileHandle &ixfileHandle, const void *
     // empty tree
     if( rootPageId == -1 )
     {
-        // 4 is sizeof(int)/sizeof(float)
-        // unsigned auxSlotSize = 3*sizeof(RecordMinLen);
-        // RecordMinLen freeSize = PAGE_SIZE - auxSlotSize - getFixedIndexSize() - 2*sizeof(IDX_PAGE_POINTER_TYPE);
-        // RecordMinLen slotCount = 1;
-        // RecordMinLen NodeType = ROOT_NODE;
-        // RecordMinLen slotInfos[3];
-        // slotInfos[2] = freeSize;
-        // slotInfos[1] = slotCount;
-        // slotInfos[0] = NodeType;
-        // memcpy( (char*)tmpPage+getNodeTypeOffset(), slotInfos, auxSlotSize );
-
-        // // insert first Node
-        // IDX_PAGE_POINTER_TYPE leftPointer = NO_POINTER;
-        // // right pointer is page 1
-        // IDX_PAGE_POINTER_TYPE rightPointer = 1;
-        // memcpy( (char*)tmpPage, &leftPointer, sizeof(IDX_PAGE_POINTER_TYPE) );
-        // memcpy( (char*)tmpPage+getFixedKeyInsertOffset(0), &keyValue, getFixedIndexSize() );
-        // memcpy( (char*)tmpPage+getFixedKeyPointerOffset(1), &rightPointer, sizeof(IDX_PAGE_POINTER_TYPE) );
-        
-        // append page
-        // ixfileHandle.appendPage(tmpPage);
-
         // insert leaf Node
         memset( tmpPage, 0, PAGE_SIZE );
         if( createFixedNewLeafNode(tmpPage, key, rid) == 0 )
@@ -189,6 +167,7 @@ RC IndexManager::insertFixedLengthEntry(IXFileHandle &ixfileHandle, const void *
                 slotCount += 1;
                 memcpy( (char*)tmpPage+getIndexSlotCountOffset(), &slotCount, sizeof(RecordMinLen) );
                 ixfileHandle.writePage(leafPageId, tmpPage);
+                success = 0;
             }
             // should split
             else
@@ -198,15 +177,82 @@ RC IndexManager::insertFixedLengthEntry(IXFileHandle &ixfileHandle, const void *
                 if( ixfileHandle.treeHeight == 1 )
                 {
                     T upwardKey;
-                    if( splitFixedLeafNode<T>( ixfileHandle, leafPageId, keyValue, rid, upwardKey, tmpPage, newPage) == 0 )
+                    int newPageId;
+                    if( splitFixedLeafNode<T>( ixfileHandle, leafPageId, newPageId, keyValue, rid, upwardKey, tmpPage, newPage) == 0 )
                     {
+                        // insert new root
+                        int newRootPageId;
+                        if( insertRootPage<T>(ixfileHandle, leafPageId, newPageId, newRootPageId, upwardKey, tmpPage) == 0)
+                        {
+                            ixfileHandle.rootPageId = newRootPageId;
+                            ixfileHandle.treeHeight += 1;
+                            success = 0;
+                        }
+                    }
 
-                    } 
                 }
                 // case 2: height > 1
                 else
                 {
+                    T upwardKey;
+                    int newPageId;
+                    if( splitFixedLeafNode<T>( ixfileHandle, leafPageId, newPageId, keyValue, rid, upwardKey, tmpPage, newPage) == 0 )
+                    {
+                        IDX_PAGE_POINTER_TYPE leftPointer = leafPageId;
+                        IDX_PAGE_POINTER_TYPE rightPointer = newPageId;
 
+                        // traverse back
+                        while( traversePointerList.size() > 0 )
+                        {
+                            INDEXPOINTER curParentPointer = traversePointerList.back();
+                            IDX_PAGE_POINTER_TYPE parentPageNum = curParentPointer.curPageNum;
+                            ixfileHandle.readPage( parentPageNum, tmpPage );
+
+                            RecordMinLen freeSize;
+                            memcpy( &freeSize, (char*)tmpPage+getIndexRestSizeOffset(), sizeof(RecordMinLen) );
+                            RecordMinLen nodeType;
+                            memcpy( &nodeType, (char*)tmpPage+getNodeTypeOffset(), sizeof(RecordMinLen) );
+                            RecordMinLen slotCount;
+                            memcpy( &slotCount, (char*)tmpPage+getIndexSlotCountOffset(), sizeof(RecordMinLen) );
+
+                            int parentIdx = curParentPointer.indexId;
+                            bool isLeft = curParentPointer.left;
+
+                            // can fit in parent node
+                            if( (freeSize - getInterNodeSize()) >= 0 )
+                            {   unsigned moveSize = (slotCount - parentIdx)*( getFixedIndexSize() + sizeof(IDX_PAGE_POINTER_TYPE) );
+                                if( moveSize > 0 )
+                                {    
+                                    memmove( (char*)tmpPage+getFixedKeyPointerOffset(parentIdx+1)+sizeof(IDX_PAGE_POINTER_TYPE), (char*)tmpPage+getFixedKeyPointerOffset(parentIdx)+sizeof(IDX_PAGE_POINTER_TYPE), moveSize );
+                                }
+                                // insert new key
+                                memcpy( (char*)tmpPage+getFixedKeyPointerOffset(parentIdx)+sizeof(IDX_PAGE_POINTER_TYPE), &upwardKey, getFixedIndexSize() );
+                                memcpy( (char*)tmpPage+getFixedKeyPointerOffset(parentIdx)+sizeof(IDX_PAGE_POINTER_TYPE)+getFixedIndexSize(), &rightPointer, sizeof(IDX_PAGE_POINTER_TYPE) );
+                                
+                                ixfileHandle.writePage( parentPageNum, tmpPage );
+                                break;
+                            }
+                            // should continue to split and go up
+                            else
+                            {
+                                if( nodeType == ROOT_NODE )
+                                {
+                                    
+                                }
+                                else
+                                {
+                                    if( splitFixedIntermediateNode<T>(ixfileHandle, parentPageNum, parentIdx, upwardKey, rightPointer, tmpPage, newPage) != 0 )
+                                    {
+                                        success = -1;
+                                        break;
+                                    }
+                                    leftPointer = parentPageNum;
+                                }
+                            }
+                            // pop pointer out
+                            traversePointerList.pop_back();
+                        }
+                    } 
                 }
                 free(newPage);
             }
@@ -225,6 +271,8 @@ RC IndexManager::insertFixedLengthEntry(IXFileHandle &ixfileHandle, const void *
             updateParentPointer( ixfileHandle, parentPointer, leafPageNum );
             // end update intermediate node
             free(newPage);
+
+            success = 0;
         }
         else
         {
@@ -403,8 +451,11 @@ RC IndexManager::insertLeafNode(T keyValue, const RID &rid, void *data, RecordMi
 
     IDX_PAGE_POINTER_TYPE insertIdx = searchFixedLeafNode(keyValue, data, slotCount);
     unsigned toMoveSize = (slotCount - insertIdx)*sizeof(LEAFNODE<T>);
-    unsigned moveDestPosition = (insertIdx+1)*sizeof(LEAFNODE<T>);
-    memmove( (char*)data+moveDestPosition, (char*)data+insertIdx*sizeof(LEAFNODE<T>), toMoveSize );
+    if(toMoveSize > 0)
+    {
+        unsigned moveDestPosition = (insertIdx+1)*sizeof(LEAFNODE<T>);
+        memmove( (char*)data+moveDestPosition, (char*)data+insertIdx*sizeof(LEAFNODE<T>), toMoveSize );
+    }
     memcpy( (char*)data+insertIdx*sizeof(LEAFNODE<T>), &keyValue, sizeof(LEAFNODE<T>) );
     return 0;
 }
@@ -472,7 +523,7 @@ bool IndexManager::compareKey(T keyValue, T toCompareValue){
 }
 
 template<class T>
-RC IndexManager::splitFixedLeafNode(IXFileHandle ixfileHandle, int curPageId, T keyValue, const RID &rid, T &upwardKey, void *curPage, void *newPage){
+RC IndexManager::splitFixedLeafNode(IXFileHandle ixfileHandle, int curPageId, int &newPageId, T keyValue, const RID &rid, T &upwardKey, void *curPage, void *newPage){
     RecordMinLen slotCount;
     memcpy( &slotCount, (char*)curPage+getIndexSlotCountOffset(), sizeof(RecordMinLen) );
     
@@ -508,11 +559,13 @@ RC IndexManager::splitFixedLeafNode(IXFileHandle ixfileHandle, int curPageId, T 
     memcpy( (char*)newPage+getLeafNodeRightPointerOffset(), (char*)curPage+getLeafNodeRightPointerOffset(), sizeof(IDX_PAGE_POINTER_TYPE) );
 
     // move data
-    memcpy( newPage, (char*)dataList+mid*sizeof(LEAFNODE<T>), moveSize );
+    if(moveSize > 0)
+    {
+        memcpy( newPage, (char*)dataList+mid*sizeof(LEAFNODE<T>), moveSize );
 
-    // clear data in cur page
-    memset( (char*)curPage+mid*sizeof(LEAFNODE<T>), 0, moveSize);
-    
+        // clear data in cur page
+        memset( (char*)curPage+mid*sizeof(LEAFNODE<T>), 0, moveSize);
+    }
     // copy new page id to curPage
     // not yet append 
     IDX_PAGE_POINTER_TYPE curPageRightPointer = ixfileHandle.getNumberOfPages();
@@ -548,6 +601,99 @@ RC IndexManager::splitFixedLeafNode(IXFileHandle ixfileHandle, int curPageId, T 
 
     // write page
     ixfileHandle.appendPage(newPage);
+    ixfileHandle.writePage( curPageId, curPage );
+    newPageId = curPageRightPointer;
+    return 0;
+}
+
+// insert new root page
+template<class T>
+RC IndexManager::insertRootPage(IXFileHandle ixfileHandle, int leftPagePointer, int rightPagePointer, int &newRootPageId, T upwardKey, void *newRootPage){
+    RecordMinLen freeSize = PAGE_SIZE - getAuxSlotsSize() - getFixedIndexSize() - 2*sizeof(IDX_PAGE_POINTER_TYPE);
+    RecordMinLen slotCount = 1;
+    RecordMinLen nodeType = ROOT_NODE;
+
+    // update aux slots
+    memset(newRootPage, 0, PAGE_SIZE);
+    RecordMinLen slotInfos[3];
+    slotInfos[0] = nodeType;
+    slotInfos[1] = slotCount;
+    slotInfos[2] = freeSize;
+    memcpy( (char*)newRootPage+getNodeTypeOffset(), slotInfos, getAuxSlotsSize() );
+
+    IDX_PAGE_POINTER_TYPE leftPointer = leftPagePointer;
+    IDX_PAGE_POINTER_TYPE rightPointer = rightPagePointer;
+    memcpy( (char*)newRootPage, &leftPointer, sizeof(IDX_PAGE_POINTER_TYPE) );
+    memcpy( (char*)newRootPage+getFixedKeyInsertOffset(0), &upwardKey, getFixedIndexSize() );
+    memcpy( (char*)newRootPage+getFixedKeyPointerOffset(1), &rightPointer, sizeof(IDX_PAGE_POINTER_TYPE) );
+
+    ixfileHandle.appendPage(newRootPage);
+    newRootPageId = ixfileHandle.getNumberOfPages() - 1;
+
+    return 0;
+}
+
+template<class T>
+RC IndexManager::splitFixedIntermediateNode(IXFileHandle ixfileHandle, int curPageId, int insertIdx, T &upwardKey, IDX_PAGE_POINTER_TYPE &rightPointer, void *curPage, void *newPage){
+    RecordMinLen freeSize;
+    RecordMinLen slotCount;
+    memcpy( &freeSize, (char*)curPage+getIndexRestSizeOffset(), sizeof(RecordMinLen) );
+    memcpy( &slotCount, (char*)curPage+getIndexSlotCountOffset(),sizeof(RecordMinLen) );
+    
+    IDX_PAGE_POINTER_TYPE upwardRightPointer = rightPointer;
+    unsigned tmpDataSize = (slotCount+1)*getInterNodeSize() + sizeof(IDX_PAGE_POINTER_TYPE);
+    void *tmpData = malloc(tmpDataSize);
+
+    memcpy( tmpData, curPage, (tmpDataSize -getInterNodeSize()) );
+
+    // move tmpData
+    int moveSize = (slotCount - insertIdx)*getInterNodeSize();
+    if( moveSize > 0)
+    {
+        memmove( (char*)tmpData+getFixedKeyPointerOffset(insertIdx)+sizeof(IDX_PAGE_POINTER_TYPE), (char*)tmpData+getFixedKeyPointerOffset(insertIdx), moveSize );
+    }
+    // insert new key
+    memcpy( (char*)tmpData+getFixedKeyPointerOffset(insertIdx)+sizeof(IDX_PAGE_POINTER_TYPE), &upwardKey, getFixedIndexSize() );
+    memcpy( (char*)tmpData+getFixedKeyPointerOffset(insertIdx)+sizeof(IDX_PAGE_POINTER_TYPE)+getFixedIndexSize(), &upwardRightPointer, sizeof(IDX_PAGE_POINTER_TYPE) );
+
+
+    RecordMinLen mid = (slotCount+1)/2;
+    
+    // get mid index
+    T midIndex;
+    memcpy( &midIndex, (char*)tmpData+getFixedKeyOffset(mid), getFixedIndexSize() );
+    
+    // update upwardKey
+    upwardKey = midIndex;
+
+    // insert new page
+    memset( newPage, 0, PAGE_SIZE );
+    RecordMinLen newSlotCount = slotCount - mid;
+    RecordMinLen newIndexDataSize = newSlotCount*getInterNodeSize() + sizeof(IDX_PAGE_POINTER_TYPE);
+    RecordMinLen newFreeSize = PAGE_SIZE - newIndexDataSize - getAuxSlotsSize();
+    RecordMinLen newNodeType = INTERMEDIATE_NODE;
+    RecordMinLen slotInfos[3];
+    slotInfos[0] = newNodeType;
+    slotInfos[1] = newSlotCount;
+    slotInfos[2] = newFreeSize;
+    memcpy( (char*)newPage+getNodeTypeOffset(), slotInfos, getAuxSlotsSize() );
+    memcpy( (char*)newPage, (char*)tmpData+getFixedKeyOffset(mid)+getFixedIndexSize(), newIndexDataSize );
+    ixfileHandle.appendPage(newPage);
+
+    // update right pointer
+    rightPointer = ixfileHandle.getNumberOfPages() - 1;
+
+    // update old page
+    freeSize += newSlotCount*getInterNodeSize();
+    slotCount -= newSlotCount;
+    slotInfos[1] = slotCount;
+    slotInfos[2] = freeSize;
+    memcpy( (char*)curPage+getNodeTypeOffset(), slotInfos, getAuxSlotsSize() );
+    RecordMinLen curIndexDataSize = slotCount*getInterNodeSize() + sizeof(IDX_PAGE_POINTER_TYPE);
+    memcpy( curPage, tmpData, curIndexDataSize );
+    RecordMinLen resetSize = getNodeTypeOffset() - curIndexDataSize;
+    memset( (char*)curPage+curIndexDataSize, 0,  resetSize );
+
     ixfileHandle.writePage( curPageId, curPage );
 
     return 0;
@@ -742,6 +888,13 @@ RC IXFileHandle::appendPage(const void *data)
 }
 
 // accessary
+
+// get aux slots size
+inline unsigned getAuxSlotsSize(){
+    return 3*sizeof(RecordMinLen);
+}
+
+
 inline unsigned getIndexSlotOffset(int slotNum) {
     return ( PAGE_SIZE - 3*sizeof(RecordMinLen) - sizeof(INDEXSLOT)*(slotNum + 1) );
 }
@@ -766,12 +919,16 @@ inline unsigned getLeafNodeRightPointerOffset() {
 inline unsigned getFixedIndexSize(){
     return (4);
 }
+// get intermediate index/pointer pair size
+inline unsigned getInterNodeSize(){
+    return ( getFixedIndexSize() + sizeof(IDX_PAGE_POINTER_TYPE) );
+}
 // intermediate node
 inline unsigned getFixedKeyInsertOffset( unsigned idx ){
     return ( sizeof(IDX_PAGE_POINTER_TYPE) + idx*( sizeof(IDX_PAGE_POINTER_TYPE) + getFixedIndexSize() ) ); 
 }
 
-// intermediate node
+// intermediate node 
 inline unsigned getFixedKeyOffset( unsigned idx ){
     return (  (idx+1)*( sizeof(IDX_PAGE_POINTER_TYPE) + getFixedIndexSize() ) - getFixedIndexSize() ); 
 }
@@ -788,4 +945,3 @@ inline unsigned getFixedKeySize(){
 inline unsigned getLeafNodeDirSize(){
     return (3*sizeof(RecordMinLen) + sizeof(IDX_PAGE_POINTER_TYPE));
 }
-
