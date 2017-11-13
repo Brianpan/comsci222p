@@ -230,6 +230,7 @@ RC IndexManager::insertFixedLengthEntry(IXFileHandle &ixfileHandle, const void *
                                 memcpy( (char*)tmpPage+getFixedKeyPointerOffset(parentIdx)+sizeof(IDX_PAGE_POINTER_TYPE)+getFixedIndexSize(), &rightPointer, sizeof(IDX_PAGE_POINTER_TYPE) );
                                 
                                 ixfileHandle.writePage( parentPageNum, tmpPage );
+                                success = 0;
                                 break;
                             }
                             // should continue to split and go up
@@ -237,7 +238,25 @@ RC IndexManager::insertFixedLengthEntry(IXFileHandle &ixfileHandle, const void *
                             {
                                 if( nodeType == ROOT_NODE )
                                 {
-                                    
+                                    if( splitFixedIntermediateNode<T>(ixfileHandle, parentPageNum, parentIdx, upwardKey, rightPointer, tmpPage, newPage) != 0 )
+                                    {
+                                        success = -1;
+                                        break;
+                                    }
+
+                                    leftPointer = parentPageNum;
+                                    // insert new root node
+                                    int newRootPageId;
+                                    if( insertRootPage<T>(ixfileHandle, leftPointer, rightPointer, newRootPageId, upwardKey, tmpPage) != 0)
+                                    {
+                                        success = -1;
+                                        break;
+                                    }
+
+                                    ixfileHandle.rootPageId = newRootPageId;
+                                    ixfileHandle.treeHeight += 1;
+                                    success = 0;
+                                    break;
                                 }
                                 else
                                 {
@@ -648,14 +667,14 @@ RC IndexManager::splitFixedIntermediateNode(IXFileHandle ixfileHandle, int curPa
 
     // move tmpData
     int moveSize = (slotCount - insertIdx)*getInterNodeSize();
+    //
     if( moveSize > 0)
     {
-        memmove( (char*)tmpData+getFixedKeyPointerOffset(insertIdx)+sizeof(IDX_PAGE_POINTER_TYPE), (char*)tmpData+getFixedKeyPointerOffset(insertIdx), moveSize );
+        memmove( (char*)tmpData+getFixedKeyPointerOffset(insertIdx+1)+sizeof(IDX_PAGE_POINTER_TYPE), (char*)tmpData+getFixedKeyPointerOffset(insertIdx)+sizeof(IDX_PAGE_POINTER_TYPE), moveSize );
     }
     // insert new key
     memcpy( (char*)tmpData+getFixedKeyPointerOffset(insertIdx)+sizeof(IDX_PAGE_POINTER_TYPE), &upwardKey, getFixedIndexSize() );
     memcpy( (char*)tmpData+getFixedKeyPointerOffset(insertIdx)+sizeof(IDX_PAGE_POINTER_TYPE)+getFixedIndexSize(), &upwardRightPointer, sizeof(IDX_PAGE_POINTER_TYPE) );
-
 
     RecordMinLen mid = (slotCount+1)/2;
     
@@ -668,6 +687,7 @@ RC IndexManager::splitFixedIntermediateNode(IXFileHandle ixfileHandle, int curPa
 
     // insert new page
     memset( newPage, 0, PAGE_SIZE );
+    // minus all mid
     RecordMinLen newSlotCount = slotCount - mid;
     RecordMinLen newIndexDataSize = newSlotCount*getInterNodeSize() + sizeof(IDX_PAGE_POINTER_TYPE);
     RecordMinLen newFreeSize = PAGE_SIZE - newIndexDataSize - getAuxSlotsSize();

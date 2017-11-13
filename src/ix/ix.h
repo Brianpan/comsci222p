@@ -88,6 +88,7 @@ class IndexManager {
     
         template<class T>
         RC splitFixedIntermediateNode(IXFileHandle ixfileHandle, int curPageId, int insertIdx, T &upwardKey, IDX_PAGE_POINTER_TYPE &rightPointer, void *curPage, void *newPage);
+
     protected:
         IndexManager();
         ~IndexManager();
