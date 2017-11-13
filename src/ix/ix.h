@@ -85,13 +85,13 @@ class IndexManager {
         IDX_PAGE_POINTER_TYPE searchFixedLeafNode(T keyValue, void *data, RecordMinLen slotCount);
 
         template<class T>
-        RC splitFixedLeafNode(IXFileHandle ixfileHandle, int curPageId, int &newPageId, T keyValue, const RID &rid, T &upwardKey, void *curPage, void *newPage);
+        RC splitFixedLeafNode(IXFileHandle &ixfileHandle, int curPageId, int &newPageId, T keyValue, const RID &rid, T &upwardKey, void *curPage, void *newPage);
         
         template<class T>
-        RC insertRootPage(IXFileHandle ixfileHandle, int leftPagePointer, int rightPagePointer, int &newRootPageId, T upwardKey, void *newRootPage);
+        RC insertRootPage(IXFileHandle &ixfileHandle, int leftPagePointer, int rightPagePointer, int &newRootPageId, T upwardKey, void *newRootPage);
     
         template<class T>
-        RC splitFixedIntermediateNode(IXFileHandle ixfileHandle, int curPageId, int insertIdx, T &upwardKey, IDX_PAGE_POINTER_TYPE &rightPointer, void *curPage, void *newPage);
+        RC splitFixedIntermediateNode(IXFileHandle &ixfileHandle, int curPageId, int insertIdx, T &upwardKey, IDX_PAGE_POINTER_TYPE &rightPointer, void *curPage, void *newPage);
 
     protected:
         IndexManager();
@@ -104,7 +104,7 @@ class IndexManager {
         template<class T>
         int traverseFixedLengthNode(IXFileHandle &ixfileHandle, T keyValue, int &curPageId, void *idxPage, vector<INDEXPOINTER> &traversePointerList);
         
-        RC updateParentPointer( IXFileHandle ixfileHandle, INDEXPOINTER indexPointer, IDX_PAGE_POINTER_TYPE pageNum );
+        RC updateParentPointer( IXFileHandle &ixfileHandle, INDEXPOINTER indexPointer, IDX_PAGE_POINTER_TYPE pageNum );
 
         template<class T>
         bool compareKey(T keyValue, T toCompareValue);

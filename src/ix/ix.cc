@@ -186,8 +186,9 @@ RC IndexManager::insertFixedLengthEntry(IXFileHandle &ixfileHandle, const void *
 
         	RecordMinLen freeSize;
             memcpy( &freeSize, (char*)tmpPage+getIndexRestSizeOffset(), sizeof(RecordMinLen) );
+            int leftSize = freeSize-getFixedKeySize();
             // should not split
-            if( freeSize-getFixedKeySize() >= 0 )
+            if( leftSize >= 0 )
             {
                 RecordMinLen slotCount;
                 memcpy( &slotCount, (char*)tmpPage+getIndexSlotCountOffset(), sizeof(RecordMinLen) );
@@ -255,9 +256,9 @@ RC IndexManager::insertFixedLengthEntry(IXFileHandle &ixfileHandle, const void *
 
                             int parentIdx = curParentPointer.indexId;
                             bool isLeft = curParentPointer.left;
-
+                            int leftSize = freeSize - getInterNodeSize();
                             // can fit in parent node
-                            if( (freeSize - getInterNodeSize()) >= 0 )
+                            if( leftSize >= 0 )
                             {   unsigned moveSize = (slotCount - parentIdx)*( getFixedIndexSize() + sizeof(IDX_PAGE_POINTER_TYPE) );
                                 if( moveSize > 0 )
                                 {    
@@ -475,7 +476,7 @@ INDEXPOINTER IndexManager::searchFixedIntermediateNode(T keyValue, int curPageId
     return idxPointer;
 }
 
-RC IndexManager::updateParentPointer( IXFileHandle ixfileHandle, INDEXPOINTER indexPointer, IDX_PAGE_POINTER_TYPE pageNum ){
+RC IndexManager::updateParentPointer( IXFileHandle &ixfileHandle, INDEXPOINTER indexPointer, IDX_PAGE_POINTER_TYPE pageNum ){
     RC success = 0;
     IDX_PAGE_POINTER_TYPE parentPageNum = indexPointer.curPageNum;
     int parentIndexId = indexPointer.indexId;
@@ -580,7 +581,7 @@ bool IndexManager::compareKey(T keyValue, T toCompareValue){
 }
 
 template<class T>
-RC IndexManager::splitFixedLeafNode(IXFileHandle ixfileHandle, int curPageId, int &newPageId, T keyValue, const RID &rid, T &upwardKey, void *curPage, void *newPage){
+RC IndexManager::splitFixedLeafNode(IXFileHandle &ixfileHandle, int curPageId, int &newPageId, T keyValue, const RID &rid, T &upwardKey, void *curPage, void *newPage){
     RecordMinLen slotCount;
     memcpy( &slotCount, (char*)curPage+getIndexSlotCountOffset(), sizeof(RecordMinLen) );
     
@@ -665,7 +666,7 @@ RC IndexManager::splitFixedLeafNode(IXFileHandle ixfileHandle, int curPageId, in
 
 // insert new root page
 template<class T>
-RC IndexManager::insertRootPage(IXFileHandle ixfileHandle, int leftPagePointer, int rightPagePointer, int &newRootPageId, T upwardKey, void *newRootPage){
+RC IndexManager::insertRootPage(IXFileHandle &ixfileHandle, int leftPagePointer, int rightPagePointer, int &newRootPageId, T upwardKey, void *newRootPage){
     RecordMinLen freeSize = PAGE_SIZE - getAuxSlotsSize() - getFixedIndexSize() - 2*sizeof(IDX_PAGE_POINTER_TYPE);
     RecordMinLen slotCount = 1;
     RecordMinLen nodeType = ROOT_NODE;
@@ -691,7 +692,7 @@ RC IndexManager::insertRootPage(IXFileHandle ixfileHandle, int leftPagePointer, 
 }
 
 template<class T>
-RC IndexManager::splitFixedIntermediateNode(IXFileHandle ixfileHandle, int curPageId, int insertIdx, T &upwardKey, IDX_PAGE_POINTER_TYPE &rightPointer, void *curPage, void *newPage){
+RC IndexManager::splitFixedIntermediateNode(IXFileHandle &ixfileHandle, int curPageId, int insertIdx, T &upwardKey, IDX_PAGE_POINTER_TYPE &rightPointer, void *curPage, void *newPage){
     RecordMinLen freeSize;
     RecordMinLen slotCount;
     memcpy( &freeSize, (char*)curPage+getIndexRestSizeOffset(), sizeof(RecordMinLen) );
