@@ -93,6 +93,15 @@ class IndexManager {
         template<class T>
         RC splitFixedIntermediateNode(IXFileHandle &ixfileHandle, int curPageId, int insertIdx, T &upwardKey, IDX_PAGE_POINTER_TYPE &rightPointer, void *curPage, void *newPage);
 
+        // here are for varchar insert
+        RC createVarcharNewLeafNode(void *data, const void *key, const RID &rid);
+        INDEXPOINTER searchVarcharIntermediateNode(const void* key, int curPageId, const void *idxPage, RecordMinLen head, RecordMinLen tail);
+
+        RC insertVarcharLeafNode(const void *key, const RID &rid, void *data, RecordMinLen slotCount);
+        void updateVarcharRestSlots(IDX_PAGE_POINTER_TYPE insertIdx, unsigned dataSize, RecordMinLen slotCount, void *data);
+        
+        IDX_PAGE_POINTER_TYPE searchVarcharLeafNode(const void *key, void *data, RecordMinLen slotCount);
+
     protected:
         IndexManager();
         ~IndexManager();
@@ -104,10 +113,15 @@ class IndexManager {
         template<class T>
         int traverseFixedLengthNode(IXFileHandle &ixfileHandle, T keyValue, int &curPageId, void *idxPage, vector<INDEXPOINTER> &traversePointerList);
         
+        int traverseVarcharNode(IXFileHandle &ixfileHandle, const void *key, int &curPageId, void *idxPage, vector<INDEXPOINTER> &traversePointerList);
+
         RC updateParentPointer( IXFileHandle &ixfileHandle, INDEXPOINTER indexPointer, IDX_PAGE_POINTER_TYPE pageNum );
+        RC updateVarcharParentPointer( IXFileHandle &ixfileHandle, INDEXPOINTER indexPointer, IDX_PAGE_POINTER_TYPE pageNum );
 
         template<class T>
         bool compareKey(T keyValue, T toCompareValue);
+
+        bool compareVarcharKey(const void *key, const void *toCompareValue);
 };
 
 
@@ -193,4 +207,16 @@ inline unsigned getFixedKeySize();
 
 // the dir size of leaf node
 inline unsigned getLeafNodeDirSize();
+
+
+// varchar insert accessary functions
+inline int getVarcharSize(const void *key);
+void fetchVarcharIntermediateNodeData( void *key, int idx, const void *data );
+unsigned getVarcharKeyPointerOffset( unsigned idx, const void *data );
+
+// leaf node key size
+unsigned getVarcharKeySize(const void *key);
+// with sizeof(INDEXSLOT)
+unsigned getVarcharTotalKeySize(const void *key);
+
 #endif
