@@ -94,16 +94,54 @@ RC IndexManager::closeFile(IXFileHandle &ixfileHandle)
 RC IndexManager::insertEntry(IXFileHandle &ixfileHandle, const Attribute &attribute, const void *key, const RID &rid)
 {
     AttrType idxAttrType = attribute.type;
+    int rootPageId = ixfileHandle.rootPageId;
+
+
     if( idxAttrType == TypeReal )
     {
+        if( rootPageId == -1 )
+        {
+            ixfileHandle.indexType = REAL_TYPE;
+        }
+        else
+        {
+            if( ixfileHandle.indexType != REAL_TYPE )
+            {
+                return -1;
+            }
+        }
         return insertFixedLengthEntry<float>( ixfileHandle, key, rid );
     }
     else if( idxAttrType == TypeInt)
     {
-    	return insertFixedLengthEntry<int>( ixfileHandle, key, rid );
+    	if( rootPageId == -1 )
+        {
+            ixfileHandle.indexType = INT_TYPE;
+        }
+        else
+        {
+            if( ixfileHandle.indexType != INT_TYPE )
+            {
+                return -1;
+            }
+        }
+
+        return insertFixedLengthEntry<int>( ixfileHandle, key, rid );
     }
     else
     {
+        if( rootPageId == -1 )
+        {
+            ixfileHandle.indexType = CHAR_TYPE;
+        }
+        else
+        {
+            if( ixfileHandle.indexType != CHAR_TYPE )
+            {
+                return -1;
+            }
+        }
+
         return insertVarLengthEntry( ixfileHandle, key, rid );
     }
     
@@ -796,7 +834,7 @@ void IXFileHandle::fetchFileData()
     // check if there is record exists
     // if so load them
     //the order of integer is pageCounter, readPageCounter, writePageCounter, appendPageCounter end with #
-    int hiddenAttrCount = 6;
+    int hiddenAttrCount = 7;
 
     _handler->seekg(0,  ios_base::beg);
     unsigned counter[hiddenAttrCount];
@@ -833,6 +871,7 @@ void IXFileHandle::fetchFileData()
     treeHeight = counter[4];
     // fetch should minus 
     rootPageId = counter[5] - 1;
+    indexType = counter[6];
 }
 
 void IXFileHandle::saveCounter()
@@ -842,7 +881,7 @@ void IXFileHandle::saveCounter()
     _handler->clear();
     _handler->seekg(0, ios_base::beg);
 
-    int hiddenAttrCount = 6;
+    int hiddenAttrCount = 7;
     unsigned counter[hiddenAttrCount];
     counter[0] = pageCounter;
     counter[1] = ixReadPageCounter;
@@ -851,7 +890,7 @@ void IXFileHandle::saveCounter()
     counter[4] = treeHeight;
     // save should add one
     counter[5] = rootPageId + 1;
-
+    counter[6] = indexType;
     _handler->write( (char*)counter , sizeof(unsigned)*hiddenAttrCount );
     return;
 }

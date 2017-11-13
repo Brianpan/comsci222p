@@ -14,6 +14,10 @@
 # define LEAF_NODE 2
 # define NO_POINTER -1
 
+# define REAL_TYPE 0
+# define INT_TYPE 1
+# define CHAR_TYPE 2
+
 typedef struct {
     RecordMinLen pageOffset;
     RecordMinLen recordSize;
@@ -135,6 +139,7 @@ class IXFileHandle {
         unsigned pageCounter;
         unsigned treeHeight;
         int rootPageId;
+        unsigned indexType;
 
         fstream* _handler = NULL;
 
