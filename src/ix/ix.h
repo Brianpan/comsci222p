@@ -102,6 +102,12 @@ class IndexManager {
         
         IDX_PAGE_POINTER_TYPE searchVarcharLeafNode(const void *key, void *data, RecordMinLen slotCount);
 
+        RC splitVarcharLeafNode(IXFileHandle &ixfileHandle, int curPageId, int &newPageId, const void *key, const RID &rid, void **upwardKey, void *curPage, void *newPage);
+        RC insertVarcharRootPage(IXFileHandle &ixfileHandle, int leftPagePointer, int rightPagePointer, int &newRootPageId, void *upwardKey, void *newRootPage);
+        
+        RC splitVarcharLeafNode(IXFileHandle &ixfileHandle, int curPageId, int &newPageId, const void *key, const RID &rid, void **upwardKey, void *curPage, void *newPage);
+    
+        RC splitVarcharIntermediateNode(IXFileHandle &ixfileHandle, int curPageId, int insertIdx, void **upwardKey, IDX_PAGE_POINTER_TYPE &rightPointer, void *curPage, void *newPage);
     protected:
         IndexManager();
         ~IndexManager();
