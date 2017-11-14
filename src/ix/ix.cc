@@ -876,7 +876,6 @@ RC IndexManager::insertVarLengthEntry(IXFileHandle &ixfileHandle, const void *ke
                             int leftSize = freeSize - sizeof(INDEXSLOT) - charLen - sizeof(IDX_PAGE_POINTER_TYPE);
                             
                             // can fit in parent node
-                            ////!!!!
                             if( leftSize >= 0 )
                             {   
                                 int slotDiff = slotCount - parentIdx;
@@ -1487,13 +1486,13 @@ RC IndexManager::splitVarcharIntermediateNode(IXFileHandle &ixfileHandle, int cu
     INDEXSLOT lastSlot;
     memcpy( &lastSlot, (char*)curPage+getIndexSlotOffset(slotCount-1), sizeof(INDEXSLOT) );
 
-    unsigned tmpDataSize = lastSlot.pageOffset + lastSlot.recordSize + insertKeyLen + sizeof(IDX_PAGE_POINTER_TYPE);
+    unsigned tmpDataSize = lastSlot.pageOffset + lastSlot.recordSize + insertKeyLen + 2*sizeof(IDX_PAGE_POINTER_TYPE);
     void *tmpData = malloc(tmpDataSize);
 
     memcpy( tmpData, curPage, (tmpDataSize - insertKeyLen - sizeof(IDX_PAGE_POINTER_TYPE)) );
 
     // move tmpData
-    int slotDiff = slotCount - parentIdx;
+    int slotDiff = slotCount - insertIdx;
 
     unsigned moveStart;
     
@@ -1502,48 +1501,47 @@ RC IndexManager::splitVarcharIntermediateNode(IXFileHandle &ixfileHandle, int cu
     if( slotDiff > 0 )
     {    
         INDEXSLOT tmpSlot;
-        memcpy( &tmpSlot, (char*)tmpData+getIndexSlotOffset(parentIdx), sizeof(INDEXSLOT) );
+        memcpy( &tmpSlot, (char*)tmpData+getIndexSlotOffset(insertIdx), sizeof(INDEXSLOT) );
         moveStart = tmpSlot.pageOffset;
-        unsigned moveDest = moveStart + sizeof(IDX_PAGE_POINTER_TYPE) + charLen;
+        unsigned moveDest = moveStart + sizeof(IDX_PAGE_POINTER_TYPE) + insertKeyLen;
         
         
         unsigned moveSize = lastSlot.pageOffset + lastSlot.recordSize + sizeof(IDX_PAGE_POINTER_TYPE) - moveStart;
-        memmove( (char*)tmpData+moveDest, (char*)tmpPage+moveStart, moveSize );
+        memmove( (char*)tmpData+moveDest, (char*)tmpData+moveStart, moveSize );
 
         // insert slot
         insertSlot.pageOffset = moveStart;
-        insertSlot.recordSize = charLen;
+        insertSlot.recordSize = insertKeyLen;
 
-        for(int i = parentIdx ; i < slotCount; i++)
+        for(int i = insertIdx ; i < slotCount; i++)
         {
             memcpy( &tmpSlot, (char*)tmpData+getIndexSlotOffset(i), sizeof(INDEXSLOT) );
-            tmpSlot.pageOffset += charLen + sizeof(IDX_PAGE_POINTER_TYPE);
+            tmpSlot.pageOffset += insertKeyLen + sizeof(IDX_PAGE_POINTER_TYPE);
             memcpy( (char*)tmpData+getIndexSlotOffset(i), &tmpSlot, sizeof(INDEXSLOT) );
         }
 
         // notice memmove is reverse
-        unsigned slotMoveSize = (slotCount - parentIdx)*sizeof(INDEXSLOT); 
-        memmove( (char*)tmpPage+getIndexSlotOffset(slotCount), (char*)tmpPage+getIndexSlotOffset(slotCount-1), slotMoveSize );
+        unsigned slotMoveSize = (slotCount - insertKeyLen)*sizeof(INDEXSLOT);
+        memmove( (char*)tmpData+getIndexSlotOffset(slotCount), (char*)tmpData+getIndexSlotOffset(slotCount-1), slotMoveSize );
     }
     else
     {
         moveStart = lastSlot.pageOffset + lastSlot.recordSize + sizeof(IDX_PAGE_POINTER_TYPE);
         insertSlot.pageOffset = moveStart;
-        insertSlot.recordSize = charLen;
+        insertSlot.recordSize = insertKeyLen;
 
     }
     // insert new key
-    memcpy( (char*)tmpData+moveStart, (char*)upwardKey+sizeof(int), charLen );
-    memcpy( (char*)tmpData+moveStart+charLen, &rightPointer, sizeof(IDX_PAGE_POINTER_TYPE) );
+    memcpy( (char*)tmpData+moveStart, (char*)upwardKey+sizeof(int), insertKeyLen );
+    memcpy( (char*)tmpData+moveStart+insertKeyLen, &rightPointer, sizeof(IDX_PAGE_POINTER_TYPE) );
     
     // should also insert slot
-    memcpy( (char*)tmpPage+getIndexSlotOffset(parentIdx), &insertSlot, sizeof(INDEXSLOT) );
-
+    memcpy( (char*)tmpData+getIndexSlotOffset(insertIdx), &insertSlot, sizeof(INDEXSLOT) );
 
     RecordMinLen mid = (slotCount+1)/2;
     
     // get mid index
-    INDEXSLOT midSlot
+    INDEXSLOT midSlot;
     memcpy( &midSlot, (char*)tmpData+getIndexSlotOffset(mid), sizeof(INDEXSLOT) );
 
     // free current upwardKey
@@ -1577,8 +1575,15 @@ RC IndexManager::splitVarcharIntermediateNode(IXFileHandle &ixfileHandle, int cu
     memcpy( (char*)newPage+getNodeTypeOffset(), slotInfos, getAuxSlotsSize() );
     // move data should skip mid node
     memcpy( (char*)newPage, (char*)tmpData+nextSlot.pageOffset, newIndexDataSize );
-    //==>!! update slot
-
+    // update slot
+    memcpy( (char*)newPage+getIndexSlotOffset(newSlotCount-1), (char*)tmpData+getIndexSlotOffset(slotCount), sizeof(INDEXSLOT)*newSlotCount );
+    INDEXSLOT tmpSlot;
+    for(int i =0; i<newSlotCount;i++)
+    {
+        memcpy( &tmpSlot, (char*)newPage+getIndexSlotOffset(i), sizeof(INDEXSLOT) );
+        tmpSlot.pageOffset -= nextSlot.pageOffset - sizeof(IDX_PAGE_POINTER_TYPE);
+        memcpy( (char*)newPage+getIndexSlotOffset(i), &tmpSlot, sizeof(INDEXSLOT) );
+    }
 
     ixfileHandle.appendPage(newPage);
 
@@ -1586,12 +1591,12 @@ RC IndexManager::splitVarcharIntermediateNode(IXFileHandle &ixfileHandle, int cu
     rightPointer = ixfileHandle.getNumberOfPages() - 1;
 
     // update old page
-    freeSize += newSlotCount*getInterNodeSize();
     slotCount -= newSlotCount;
+    RecordMinLen curIndexDataSize = tmpDataSize - newIndexDataSize - midSlot.recordSize;
+    freeSize = slotCount*sizeof(INDEXSLOT) + curIndexDataSize;
     slotInfos[1] = slotCount;
     slotInfos[2] = freeSize;
     memcpy( (char*)curPage+getNodeTypeOffset(), slotInfos, getAuxSlotsSize() );
-    RecordMinLen curIndexDataSize = slotCount*getInterNodeSize() + sizeof(IDX_PAGE_POINTER_TYPE);
     memcpy( curPage, tmpData, curIndexDataSize );
     RecordMinLen resetSize = getNodeTypeOffset() - curIndexDataSize;
     memset( (char*)curPage+curIndexDataSize, 0,  resetSize );
