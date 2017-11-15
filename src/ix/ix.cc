@@ -836,14 +836,14 @@ RC IndexManager::insertVarLengthEntry(IXFileHandle &ixfileHandle, const void *ke
                     {
                         // insert new root
                         int newRootPageId;
-                        if( insertVarcharRootPage(ixfileHandle, leafPageId, newPageId, newRootPageId, upwardKey, tmpPage) == 0)
+                        if( insertVarcharRootPage(ixfileHandle, leafPageId, newPageId, newRootPageId, upwardKey, tmpPage) == 0 )
                         {
                             ixfileHandle.rootPageId = newRootPageId;
                             ixfileHandle.treeHeight += 1;
                             success = 0;
                         }
                     }
-
+                    free(upwardKey);
                 }
                 // case 2: height > 1
                 // else
@@ -1377,7 +1377,7 @@ RC IndexManager::splitVarcharLeafNode(IXFileHandle &ixfileHandle, int curPageId,
         memset( (char*)curPage+slot.pageOffset, 0, moveSize);
         
         // move slots
-        memcpy( (char*)newPage+getIndexSlotOffset(0) , (char*)curPage+getIndexSlotOffset(mid), sizeof(INDEXSLOT)*newSlotCount );
+        memcpy( (char*)newPage+getIndexSlotOffset(newSlotCount-1) , (char*)curPage+getIndexSlotOffset(slotCount-1), sizeof(INDEXSLOT)*newSlotCount );
         // update pageOffset
         INDEXSLOT tmpSlot;
         for(int i=0; i<newSlotCount;i++)
@@ -1434,7 +1434,7 @@ RC IndexManager::splitVarcharLeafNode(IXFileHandle &ixfileHandle, int curPageId,
     return 0;
 }
 
-RC insertVarcharRootPage(IXFileHandle &ixfileHandle, int leftPagePointer, int rightPagePointer, int &newRootPageId, void *upwardKey, void *newRootPage){
+RC IndexManager::insertVarcharRootPage(IXFileHandle &ixfileHandle, int leftPagePointer, int rightPagePointer, int &newRootPageId, void *upwardKey, void *newRootPage){
     int charLen = getVarcharSize(upwardKey);
     void *keyValue = malloc(charLen);
     memcpy( keyValue, (char*)upwardKey+sizeof(int), charLen );
