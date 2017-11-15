@@ -85,7 +85,7 @@ RC testCase_Varchar_Leafnode_Search(const string &indexFileName)
     cout<<(char*)data<<endl;
     free(data);
     cout<<"Insert Leaf Node checking finished !"<<endl;
-    
+
     RecordMinLen freeSize = 0;
     RecordMinLen NodeType = LEAF_NODE;
     RecordMinLen slotInfos[3];
@@ -116,7 +116,7 @@ RC testCase_Varchar_Leafnode_Search(const string &indexFileName)
     cout<<"upwardKeySize:"<<upwardKeySize<<endl;
     cout<<"newPageId:"<<newPageId<<endl;
     data = malloc(upwardKeySize);
-    memcpy( data, (char*)upwardKey+sizeof(int), upwardKeySize );
+    memcpy( data, upwardKey+sizeof(int), upwardKeySize );
     cout<<(char*)data<<endl;
 
     // check slotCount
@@ -124,7 +124,7 @@ RC testCase_Varchar_Leafnode_Search(const string &indexFileName)
     assert(slotCount==4 && "slotCount not matched !");
     memcpy( &slotCount, (char*)newPage+getIndexSlotCountOffset(), sizeof(RecordMinLen) );
     assert(slotCount==5 && "new page slotCount not matched !");
-    
+
     // check page rid
     // check new page
     memcpy(&slot, (char*)newPage+getIndexSlotOffset(3), sizeof(INDEXSLOT) );
@@ -143,16 +143,6 @@ RC testCase_Varchar_Leafnode_Search(const string &indexFileName)
     rc = indexManager->insertVarcharRootPage(ixfileHandle, 0, newPageId, newRootPageId, upwardKey, newRootPage);
     assert(rc == success && "insertVarcharRootPage failed !");
 
-    memcpy( &slot, (char*)newRootPage+getIndexSlotOffset(0), sizeof(INDEXSLOT) );
-    memcpy( data, (char*)newRootPage+slot.pageOffset, upwardKeySize );
-    cout<<(char*)data<<endl;
-    // check pointers
-    int leftPointer, rightPointer;
-    memcpy( &leftPointer, newRootPage, sizeof(int));
-    memcpy( &rightPointer, (char*)newRootPage+slot.pageOffset+slot.recordSize, sizeof(int) );
-    cout<<"leftPointer"<<leftPointer<<"rightPointer"<<rightPointer<<endl;
-
-    // free
     free(data);
     free(upwardKey);
     free(tmpPage);
