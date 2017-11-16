@@ -188,7 +188,11 @@ RC testCase_Varchar_Intermediatenode(const string &indexFileName)
     cout<<(char*)a<<endl;
     assert(upwardKeyLen == 8 && "splitVarcharIntermediateNode validation failed !");
 
-
+    RecordMinLen checkSlotCount;
+    memcpy(&checkSlotCount, (char*)iterPage+getIndexSlotCountOffset(), sizeof(RecordMinLen) );
+    cout<<"iterPage slotCount:"<<checkSlotCount<<endl;
+    memcpy(&checkSlotCount, (char*)newPage+getIndexSlotCountOffset(), sizeof(RecordMinLen) );
+    cout<<"newPage slotCount:"<<checkSlotCount<<endl;
     // free
     free(data);
     free(upwardKey);
