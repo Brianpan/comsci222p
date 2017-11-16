@@ -58,7 +58,8 @@ RC IndexManager::openFile(const string &fileName, IXFileHandle &ixfileHandle)
 
     if( !isFileExist(fileName) )
     {
-            return -1;
+        _fileExist = false;
+        return -1;
     }
 
     // open file
@@ -66,7 +67,7 @@ RC IndexManager::openFile(const string &fileName, IXFileHandle &ixfileHandle)
     ixfileHandle._handler= new fstream();
     ixfileHandle._handler->open(fileName);
     ixfileHandle.fetchFileData();
-
+    _fileExist = true;
     return 0;
 }
 
@@ -520,7 +521,7 @@ RC IndexManager::insertLeafNode(T keyValue, const RID &rid, void *data, RecordMi
         unsigned moveDestPosition = (insertIdx+1)*sizeof(LEAFNODE<T>);
         memmove( (char*)data+moveDestPosition, (char*)data+insertIdx*sizeof(LEAFNODE<T>), toMoveSize );
     }
-    memcpy( (char*)data+insertIdx*sizeof(LEAFNODE<T>), &keyValue, sizeof(LEAFNODE<T>) );
+    memcpy( (char*)data+insertIdx*sizeof(LEAFNODE<T>), &leafNode, sizeof(LEAFNODE<T>) );
     return 0;
 }
 
@@ -1400,7 +1401,7 @@ RC IndexManager::splitVarcharLeafNode(IXFileHandle &ixfileHandle, int curPageId,
     RecordMinLen freeSize;
     memcpy( &freeSize, (char*)curPage+getIndexRestSizeOffset(), sizeof(RecordMinLen) );
     
-    // should minus the slot removed 
+    // should add the slot removed 
     freeSize += moveSize + sizeof(INDEXSLOT)*newSlotCount;
 
     if(insertCurPage)
@@ -1629,7 +1630,20 @@ RC IndexManager::scan(IXFileHandle &ixfileHandle,
         bool        	highKeyInclusive,
         IX_ScanIterator &ix_ScanIterator)
 {
-    return -1;
+    
+    if( !_fileExist )
+    {
+        return -1;
+    }
+
+    ix_ScanIterator._attribute = attribute;
+    ix_ScanIterator._lowKey = (void*)lowKey;
+    ix_ScanIterator._highKey = (void*)highKey;
+    ix_ScanIterator._ixfileHandlePtr = &ixfileHandle;
+    ix_ScanIterator._lowKeyInclusive =lowKeyInclusive;
+    ix_ScanIterator._highKeyInclusive = highKeyInclusive;
+
+    return 0;
 }
 
 void IndexManager::printBtree(IXFileHandle &ixfileHandle, const Attribute &attribute) const {
@@ -1639,6 +1653,8 @@ void IndexManager::printBtree(IXFileHandle &ixfileHandle, const Attribute &attri
 //// start scanIterator ////
 IX_ScanIterator::IX_ScanIterator()
 {
+    _tmpPage = malloc(PAGE_SIZE);
+    _isStart = true;
 }
 
 IX_ScanIterator::~IX_ScanIterator()
@@ -1647,12 +1663,302 @@ IX_ScanIterator::~IX_ScanIterator()
 
 RC IX_ScanIterator::getNextEntry(RID &rid, void *key)
 {
-    return -1;
+    _indexManager = IndexManager::instance();
+    RC success = 0;
+    // traverse from root node
+    if( _isStart )
+    {
+        // read root node
+        int curPageId = _ixfileHandlePtr->rootPageId;
+        if( _ixfileHandlePtr->readPage( curPageId, _tmpPage ) != 0 )
+        {
+            return -1;
+        }
+        RecordMinLen nodeType;
+        memcpy( &nodeType, (char*)_tmpPage+getNodeTypeOffset(), sizeof(RecordMinLen) );
+        RecordMinLen slotCount;
+        memcpy( &slotCount, (char*)_tmpPage+getIndexSlotCountOffset(), sizeof(RecordMinLen) );
+
+        INDEXPOINTER indexPointer;
+        // traverse til leaf node
+        while(nodeType != LEAF_NODE)
+        {
+            // search from intermediateNode
+            if( _attribute.type == TypeVarChar )
+            {
+                if(_lowKey != NULL)
+                    indexPointer = _indexManager->searchVarcharIntermediateNode( _lowKey, curPageId, _tmpPage, 0, slotCount );
+                else
+                {
+                    int pageNum;
+                    memcpy( &pageNum, (char*)_tmpPage, sizeof(int) );
+                    indexPointer.pageNum = pageNum;
+                }
+            }
+            else
+            {
+                if( _attribute.type == TypeInt )
+                {
+                    int keyValue;
+                    if(_lowKey != NULL)
+                    {
+                        memcpy( &keyValue, _lowKey, sizeof(int) );
+                        indexPointer = _indexManager->searchFixedIntermediateNode<int>( keyValue, curPageId, _tmpPage, 0, slotCount );
+                    }
+                    else
+                    {
+                        int pageNum;
+                        memcpy( &pageNum, (char*)_tmpPage, sizeof(int) );
+                        indexPointer.pageNum = pageNum;
+                    }
+                }
+                else
+                {
+                    float keyValue;
+                    if(_lowKey != NULL)
+                    {
+                        memcpy( &keyValue, _lowKey, sizeof(float) );
+                        indexPointer = _indexManager->searchFixedIntermediateNode<float>( keyValue, curPageId, _tmpPage, 0, slotCount );
+                    }
+                    else
+                    {
+                        int pageNum;
+                        memcpy( &pageNum, (char*)_tmpPage, sizeof(int) );
+                        indexPointer.pageNum = pageNum;
+                    }
+                }
+            }
+            
+            // update curPageId
+            curPageId = indexPointer.pageNum;
+            _ixfileHandlePtr->readPage(curPageId, _tmpPage);
+
+            memcpy( &nodeType, (char*)_tmpPage+getNodeTypeOffset(), sizeof(RecordMinLen) );
+            memcpy( &slotCount, (char*)_tmpPage+getIndexSlotCountOffset(), sizeof(RecordMinLen) );
+        }
+
+        _pageId = curPageId;
+        _slotNum = 0;
+
+        _isStart = false;
+
+    }
+
+    // traverse from leaf nodes
+    RecordMinLen slotCount;
+    memcpy( &slotCount, (char*)_tmpPage+getIndexSlotCountOffset(), sizeof(RecordMinLen) );
+
+    INDEXSLOT slot;
+    while(true)
+    {
+        // check should change page or not
+        
+        if( _slotNum >= slotCount )
+        {
+            memcpy( &_pageId, (char*)_tmpPage+getLeafNodeRightPointerOffset(), sizeof(int) );
+            // no more pages
+            if(_pageId == -1)
+            {
+                success = -1;
+                break;
+            }
+            else
+            {
+                if( _ixfileHandlePtr->readPage(_pageId, _tmpPage) != 0 )
+                {
+                    success = -1;
+                    break;
+                }
+                _slotNum = 0;
+            }
+        }
+        // start check
+        if(_attribute.type == TypeVarChar)
+        {
+            int keySize;
+            void *lowKeyValue;
+            
+            memcpy( &slot, (char*)_tmpPage+getIndexSlotOffset(_slotNum), sizeof(INDEXSLOT) );
+            void *data = malloc(slot.recordSize);
+            memcpy( data, (char*)_tmpPage+slot.pageOffset, slot.recordSize );
+            int compareFlag;
+
+            if(_lowKey == NULL)
+            {
+                compareFlag = 0;
+            }
+            else
+            {
+                keySize = getVarcharSize(_lowKey);
+                lowKeyValue = malloc(keySize);
+                memcpy( lowKeyValue, (char*)_lowKey+sizeof(int), keySize );
+                compareFlag = strcmp((const char*)data, (const char*)lowKeyValue);
+            }
+            
+            if( compareFlag >= 0 )
+            {
+                if( _lowKey == NULL || _lowKeyInclusive || (!_lowKeyInclusive && (compareFlag >0)) )
+                {
+                    
+                    void *highKeyValue;
+                    
+                    int compareRightFlag;
+                    
+                    if(_highKey == NULL)
+                    {
+                        compareRightFlag = -1;
+                    }
+                    else
+                    {
+                        keySize = getVarcharSize(_highKey);
+                        highKeyValue = malloc(keySize);
+                        memcpy( highKeyValue, (char*)_highKey+sizeof(int), sizeof(int) );
+                        compareRightFlag = strcmp( (const char*)data, (const char*)highKeyValue );
+                    }
+                    // fit requirement
+                    if( compareRightFlag < 0 || ( _highKeyInclusive &&(compareRightFlag==0) ) )
+                    {
+                        memcpy( &rid, (char*)_tmpPage+slot.pageOffset+slot.recordSize, sizeof(RID) );
+                        _slotNum += 1;                        
+                    }
+
+                    // should stop get next idx
+                    else
+                    {
+                        success = -1;
+                    }
+
+                    free(data);
+                    if(_highKey != NULL)   
+                        free(highKeyValue);
+                    if(_lowKey != NULL)
+                        free(lowKeyValue);
+                    break;
+                    
+                }
+                // should continue
+                else
+                {
+                    if(_lowKey != NULL)
+                        free(lowKeyValue);
+                    free(data);
+                    _slotNum += 1;
+                    continue;
+                }
+            }
+            else
+            {
+                if(_lowKey != NULL)
+                    free(lowKeyValue);
+                free(data);
+                _slotNum += 1;
+                continue;
+            }
+        }
+        // int/float type
+        else
+        {
+            if( _attribute.type == TypeInt )
+            {
+                int keyValue;
+                int lowKeyValue;
+                if(_lowKey != NULL)
+                {
+                    memcpy( &lowKeyValue, _lowKey, sizeof(int) );
+                }
+
+                memcpy( &keyValue, (char*)_tmpPage+getFixedLeafNodeOffset(_slotNum), sizeof(int) );
+
+                if( (_lowKey == NULL) || (keyValue >= lowKeyValue) )
+                {
+                    if( (_lowKey == NULL) || _lowKeyInclusive || (!_lowKeyInclusive && (keyValue > lowKeyValue)))
+                    {
+                        
+                        int highKeyValue;
+
+                        if(_highKey != NULL)
+                        {
+                            memcpy( &highKeyValue, _highKey, sizeof(int) );
+                        }
+
+                        if( (_highKey == NULL) || (keyValue < highKeyValue) || ( (keyValue == highKeyValue) && (keyValue == highKeyValue) ) )
+                        {
+                            memcpy( &rid, (char*)_tmpPage+getFixedLeafNodeOffset(_slotNum)+sizeof(int), sizeof(RID) );
+                            _slotNum += 1;
+                            
+                        }
+                        else
+                        {
+                            success = -1;
+                        }
+                        break;
+                    }
+                    else
+                    {
+                        _slotNum += 1;
+                        continue;
+                    }
+                }
+                else
+                {
+                    _slotNum += 1;
+                    continue;
+                }
+            }
+            else
+            {
+                float keyValue;
+                float lowKeyValue;
+                if(_lowKey != NULL)
+                {
+                    memcpy( &lowKeyValue, _lowKey, sizeof(float) );
+                }
+
+                memcpy( &keyValue, (char*)_tmpPage+getFixedLeafNodeOffset(_slotNum), sizeof(int) );
+
+                if( (_lowKey == NULL) || keyValue >= lowKeyValue )
+                {
+                    if( (_lowKey == NULL) || _lowKeyInclusive || (!_lowKeyInclusive && (keyValue > lowKeyValue)) )
+                    {
+                        float highKeyValue;
+                        if(_highKey != NULL)
+                        {
+                            memcpy( &highKeyValue, _highKey, sizeof(float) );
+                        }
+
+                        if( (_highKey == NULL) || (keyValue < highKeyValue) || ( (keyValue == highKeyValue) && (keyValue == highKeyValue) ) )
+                        {
+                            memcpy( &rid, (char*)_tmpPage+getFixedLeafNodeOffset(_slotNum)+sizeof(float), sizeof(RID) );
+                            _slotNum += 1;      
+                        }
+                        else
+                        {
+                            success = -1;
+                        }
+                        break;
+                    }
+                    else
+                    {
+                        _slotNum += 1;
+                        continue;
+                    }
+                }
+                else
+                {
+                    _slotNum += 1;
+                    continue;
+                }
+            }
+        }
+    }
+
+    return success;
 }
 
 RC IX_ScanIterator::close()
 {
-    return -1;
+    free(_tmpPage);
+    return 0;
 }
 //// end scanIterator ////
 
@@ -1860,6 +2166,11 @@ inline unsigned getFixedKeySize(){
 // the dir size of leaf node
 inline unsigned getLeafNodeDirSize(){
     return (3*sizeof(RecordMinLen) + sizeof(IDX_PAGE_POINTER_TYPE));
+}
+
+// leaf node idx offset
+inline unsigned getFixedLeafNodeOffset(unsigned idx){
+    return ( idx*getFixedKeySize() );
 }
 
 inline int getVarcharSize(const void *key){

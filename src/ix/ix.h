@@ -106,13 +106,20 @@ class IndexManager {
         RC insertVarcharRootPage(IXFileHandle &ixfileHandle, int leftPagePointer, int rightPagePointer, int &newRootPageId, void *upwardKey, void *newRootPage);
             
         RC splitVarcharIntermediateNode(IXFileHandle &ixfileHandle, int curPageId, int insertIdx, void **upwardKey, IDX_PAGE_POINTER_TYPE &rightPointer, void *curPage, void *newPage);
+        
+        template<class T>
+        bool compareKey(T keyValue, T toCompareValue);
+
+        bool compareVarcharKey(const void *key, const void *toCompareValue);
+
     protected:
         IndexManager();
         ~IndexManager();
 
     private:
         static IndexManager *_index_manager;
-
+        bool _fileExist = false;
+        
         RC createFixedNewLeafNode(void *data, const void *key, const RID &rid);
         template<class T>
         int traverseFixedLengthNode(IXFileHandle &ixfileHandle, T keyValue, int &curPageId, void *idxPage, vector<INDEXPOINTER> &traversePointerList);
@@ -122,10 +129,7 @@ class IndexManager {
         RC updateParentPointer( IXFileHandle &ixfileHandle, INDEXPOINTER indexPointer, IDX_PAGE_POINTER_TYPE pageNum );
         RC updateVarcharParentPointer( IXFileHandle &ixfileHandle, INDEXPOINTER indexPointer, IDX_PAGE_POINTER_TYPE pageNum );
 
-        template<class T>
-        bool compareKey(T keyValue, T toCompareValue);
-
-        bool compareVarcharKey(const void *key, const void *toCompareValue);
+        
 };
 
 
@@ -143,6 +147,22 @@ class IX_ScanIterator {
 
         // Terminate index scan
         RC close();
+
+        IXFileHandle *_ixfileHandlePtr;
+        void *_highKey;
+        void *_lowKey;
+        Attribute _attribute;
+        bool _lowKeyInclusive;
+        bool _highKeyInclusive;
+        void *_tmpPage;
+
+        IndexManager *_indexManager;
+
+
+        // note current interslot
+        bool _isStart;
+        int _pageId;
+        int _slotNum;
 };
 
 
@@ -212,6 +232,7 @@ inline unsigned getFixedKeySize();
 // the dir size of leaf node
 inline unsigned getLeafNodeDirSize();
 
+inline unsigned getFixedLeafNodeOffset(unsigned idx);
 
 // varchar insert accessary functions
 inline int getVarcharSize(const void *key);
