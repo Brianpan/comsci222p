@@ -1195,7 +1195,8 @@ RC IndexManager::insertVarcharLeafNode(const void *key, const RID &rid, void *da
     // get last leaf record
     INDEXSLOT lastSlot;
     memcpy( &lastSlot, (char*)data+getIndexSlotOffset(slotCount-1), sizeof(INDEXSLOT) );
-    
+    // cout<<"SlotCount"<<slotCount<<"RecordSize"<<lastSlot.recordSize<<"lastSlot pageOffset"<<lastSlot.pageOffset<<endl;
+
     if(toMoveSlot > 0)
     {
         INDEXSLOT slot;
@@ -1205,6 +1206,7 @@ RC IndexManager::insertVarcharLeafNode(const void *key, const RID &rid, void *da
 
         unsigned toMoveSize = lastSlot.pageOffset + lastSlot.recordSize + sizeof(RID) - pageOffset;
         unsigned moveDestPosition = pageOffset + dataSize;
+        // cout<<"Index"<<insertIdx<<"toMoveSize"<<toMoveSize<<"pageOffset"<<pageOffset<<endl;
         memmove( (char*)data+moveDestPosition, (char*)data+pageOffset, toMoveSize );
         
         // move slots larger than inserted point
@@ -1236,9 +1238,9 @@ void IndexManager::updateVarcharRestSlots( IDX_PAGE_POINTER_TYPE insertIdx, unsi
     // update slots pageOffset
     for(int idx = insertIdx; idx < slotCount; idx++)
     {
-        memcpy( &slot, (char*)data+getIndexSlotOffset(insertIdx), sizeof(INDEXSLOT) );
+        memcpy( &slot, (char*)data+getIndexSlotOffset(idx), sizeof(INDEXSLOT) );
         slot.pageOffset += dataSize;
-        memcpy( (char*)data+getIndexSlotOffset(insertIdx), &slot, sizeof(INDEXSLOT) );
+        memcpy( (char*)data+getIndexSlotOffset(idx), &slot, sizeof(INDEXSLOT) );
     }
 
     // shift slots for one slot size
@@ -1318,6 +1320,7 @@ IDX_PAGE_POINTER_TYPE IndexManager::searchVarcharLeafNode(const void *key, void 
 
 // split varchar leaf node
 RC IndexManager::splitVarcharLeafNode(IXFileHandle &ixfileHandle, int curPageId, int &newPageId, const void *key, const RID &rid, void **upwardKey, void *curPage, void *newPage){
+    cout<<"splitvarchar"<<endl;
     RecordMinLen slotCount;
     memcpy( &slotCount, (char*)curPage+getIndexSlotCountOffset(), sizeof(RecordMinLen) );
     
@@ -1358,7 +1361,7 @@ RC IndexManager::splitVarcharLeafNode(IXFileHandle &ixfileHandle, int curPageId,
         moveSize = lastSlot.pageOffset + lastSlot.recordSize + sizeof(RID) - slot.pageOffset;
     }
 
-    RecordMinLen newFreeSize = PAGE_SIZE - getLeafNodeDirSize() - moveSize;
+    RecordMinLen newFreeSize = PAGE_SIZE - getLeafNodeDirSize() - moveSize - newSlotCount*sizeof(INDEXSLOT);
     RecordMinLen NodeType = LEAF_NODE;
 
     RecordMinLen slotInfos[3];
@@ -1403,17 +1406,17 @@ RC IndexManager::splitVarcharLeafNode(IXFileHandle &ixfileHandle, int curPageId,
     
     // should add the slot removed 
     freeSize += moveSize + sizeof(INDEXSLOT)*newSlotCount;
+    memcpy( (char*)curPage+getIndexRestSizeOffset(), &freeSize, sizeof(RecordMinLen) );
 
     if(insertCurPage)
     {
         insertVarcharLeafNode(key, rid, curPage, slotCount);
         slotCount += 1;
         freeSize -= charLen + sizeof(INDEXSLOT);
-
     }
     else
     {
-        insertVarcharLeafNode(key, rid, newPage, slotCount);
+        insertVarcharLeafNode(key, rid, newPage, newSlotCount);
         newSlotCount += 1;
         newFreeSize -= charLen + sizeof(INDEXSLOT);
         slotInfos[2] = newFreeSize;
