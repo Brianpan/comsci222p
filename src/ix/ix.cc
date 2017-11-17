@@ -847,7 +847,7 @@ RC IndexManager::insertVarLengthEntry(IXFileHandle &ixfileHandle, const void *ke
                     free(upwardKey);
                 }
                 // case 2: height > 1
-                // else
+                else
                 {
                     void *upwardKey;
                     int newPageId;
@@ -1008,7 +1008,6 @@ RC IndexManager::insertVarLengthEntry(IXFileHandle &ixfileHandle, const void *ke
 // varchar insert start 
 // create empty leaf node
 RC IndexManager::createVarcharNewLeafNode(void *data, const void *key, const RID &rid){
-    
     unsigned auxSlotSize = 3*sizeof(RecordMinLen);
     int charLen = getVarcharSize(key);
 
@@ -1027,7 +1026,8 @@ RC IndexManager::createVarcharNewLeafNode(void *data, const void *key, const RID
     // should not copy char length
     memcpy( data, (char*)key+sizeof(int), charLen );
     memcpy( data+charLen, &rid, sizeof(RID) );
-    
+    cout<<"rid"<<rid.pageNum<<","<<rid.slotNum<<endl;
+
     INDEXSLOT slot;
     slot.pageOffset = 0;
     slot.recordSize = charLen;
@@ -1184,7 +1184,6 @@ RC IndexManager::updateVarcharParentPointer( IXFileHandle &ixfileHandle, INDEXPO
 }
 
 RC IndexManager::insertVarcharLeafNode(const void *key, const RID &rid, void *data, RecordMinLen slotCount){
-
     int varcharSize = getVarcharSize(key);
     int dataSize = varcharSize + sizeof(RID);
 
@@ -1192,10 +1191,10 @@ RC IndexManager::insertVarcharLeafNode(const void *key, const RID &rid, void *da
     unsigned toMoveSlot = slotCount - insertIdx;
     RecordMinLen pageOffset;
     
+
     // get last leaf record
     INDEXSLOT lastSlot;
     memcpy( &lastSlot, (char*)data+getIndexSlotOffset(slotCount-1), sizeof(INDEXSLOT) );
-    // cout<<"SlotCount"<<slotCount<<"RecordSize"<<lastSlot.recordSize<<"lastSlot pageOffset"<<lastSlot.pageOffset<<endl;
 
     if(toMoveSlot > 0)
     {
@@ -1206,7 +1205,6 @@ RC IndexManager::insertVarcharLeafNode(const void *key, const RID &rid, void *da
 
         unsigned toMoveSize = lastSlot.pageOffset + lastSlot.recordSize + sizeof(RID) - pageOffset;
         unsigned moveDestPosition = pageOffset + dataSize;
-        // cout<<"Index"<<insertIdx<<"toMoveSize"<<toMoveSize<<"pageOffset"<<pageOffset<<endl;
         memmove( (char*)data+moveDestPosition, (char*)data+pageOffset, toMoveSize );
         
         // move slots larger than inserted point
@@ -1320,7 +1318,6 @@ IDX_PAGE_POINTER_TYPE IndexManager::searchVarcharLeafNode(const void *key, void 
 
 // split varchar leaf node
 RC IndexManager::splitVarcharLeafNode(IXFileHandle &ixfileHandle, int curPageId, int &newPageId, const void *key, const RID &rid, void **upwardKey, void *curPage, void *newPage){
-    cout<<"splitvarchar"<<endl;
     RecordMinLen slotCount;
     memcpy( &slotCount, (char*)curPage+getIndexSlotCountOffset(), sizeof(RecordMinLen) );
     
@@ -1443,7 +1440,7 @@ RC IndexManager::insertVarcharRootPage(IXFileHandle &ixfileHandle, int leftPageP
     void *keyValue = malloc(charLen);
     memcpy( keyValue, (char*)upwardKey+sizeof(int), charLen );
 
-    RecordMinLen freeSize = PAGE_SIZE - getAuxSlotsSize() - charLen - sizeof(int) - 2*sizeof(IDX_PAGE_POINTER_TYPE);
+    RecordMinLen freeSize = PAGE_SIZE - getAuxSlotsSize() - charLen - sizeof(INDEXSLOT) - 2*sizeof(IDX_PAGE_POINTER_TYPE);
     RecordMinLen slotCount = 1;
     RecordMinLen nodeType = ROOT_NODE;
 
@@ -1815,7 +1812,7 @@ RC IX_ScanIterator::getNextEntry(RID &rid, void *key)
                     {
                         keySize = getVarcharSize(_highKey);
                         highKeyValue = malloc(keySize);
-                        memcpy( highKeyValue, (char*)_highKey+sizeof(int), sizeof(int) );
+                        memcpy( highKeyValue, (char*)_highKey+sizeof(int), keySize );
                         compareRightFlag = strcmp( (const char*)data, (const char*)highKeyValue );
                     }
                     // fit requirement
@@ -1826,9 +1823,18 @@ RC IX_ScanIterator::getNextEntry(RID &rid, void *key)
                     }
 
                     // should stop get next idx
-                    else
+                    else if( compareRightFlag > 0 || ( !_highKeyInclusive && (compareRightFlag==0) ))
                     {
                         success = -1;
+                    }
+                    else
+                    {
+                    	free(data);
+                    	if(_highKey != NULL)
+                    		free(highKeyValue);
+                    	if(_lowKey != NULL)
+                    	    free(lowKeyValue);
+                    	continue;
                     }
 
                     free(data);

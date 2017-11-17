@@ -44,7 +44,7 @@ int testCase_p5(const string &indexFileName,
     for(; i <= numOfTuples; i++)
     {
         prepareKeyAndRid(count, i * 10, key, rid);
-
+        cout<<"rid"<<rid.pageNum<<","<<rid.slotNum<<endl;
         rc = indexManager->insertEntry(ixfileHandle, attribute, &key, rid);
         assert(rc == success && "indexManager::insertEntry() should not fail.");
     }

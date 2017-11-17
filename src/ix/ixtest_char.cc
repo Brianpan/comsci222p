@@ -65,7 +65,7 @@ int testCase_13(const string &indexFileName, const Attribute &attribute)
             numOfTuplesTobeScanned++;
         }
     }
-    
+    cout<<"Insert More"<<endl;
     // insert more entries
     *(int *)key = tested_ascii;
     for (unsigned j = 0; j < tested_ascii; j++)
@@ -101,7 +101,9 @@ int testCase_13(const string &indexFileName, const Attribute &attribute)
     for(unsigned j = 0; j < offset; j++)
     {
         key[4 + j] = 'a' + offset - 1;
+        cout<<key[4+j];
     }
+    cout<<endl;
 
     rc = indexManager->scan(ixfileHandle, attribute, &key, &key, true, true, ix_ScanIterator);
     assert(rc == success && "indexManager::scan() should not fail.");
