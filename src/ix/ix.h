@@ -119,7 +119,7 @@ class IndexManager {
     private:
         static IndexManager *_index_manager;
         bool _fileExist = false;
-        
+
         RC createFixedNewLeafNode(void *data, const void *key, const RID &rid);
         template<class T>
         int traverseFixedLengthNode(IXFileHandle &ixfileHandle, T keyValue, int &curPageId, void *idxPage, vector<INDEXPOINTER> &traversePointerList);
@@ -203,6 +203,7 @@ class IXFileHandle {
 // aux slots size
 inline unsigned getAuxSlotsSize();
 
+inline unsigned getIndexLeafSlotOffset(int slotNum);
 inline unsigned getIndexSlotOffset(int slotNum);
 inline unsigned getIndexRestSizeOffset();
 inline unsigned getIndexSlotCountOffset();

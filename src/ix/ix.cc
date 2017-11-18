@@ -1011,7 +1011,7 @@ RC IndexManager::createVarcharNewLeafNode(void *data, const void *key, const RID
     unsigned auxSlotSize = 3*sizeof(RecordMinLen);
     int charLen = getVarcharSize(key);
 
-    RecordMinLen freeSize = PAGE_SIZE - auxSlotSize - sizeof(INDEXSLOT) - charLen - sizeof(IDX_PAGE_POINTER_TYPE);
+    RecordMinLen freeSize = PAGE_SIZE - auxSlotSize - sizeof(INDEXSLOT) - charLen - sizeof(RID)- sizeof(IDX_PAGE_POINTER_TYPE);
     RecordMinLen slotCount = 1;
     RecordMinLen NodeType = LEAF_NODE;
     RecordMinLen slotInfos[3];
@@ -1026,12 +1026,11 @@ RC IndexManager::createVarcharNewLeafNode(void *data, const void *key, const RID
     // should not copy char length
     memcpy( data, (char*)key+sizeof(int), charLen );
     memcpy( data+charLen, &rid, sizeof(RID) );
-    cout<<"rid"<<rid.pageNum<<","<<rid.slotNum<<endl;
 
     INDEXSLOT slot;
     slot.pageOffset = 0;
     slot.recordSize = charLen;
-    memcpy( (char*)data+getIndexSlotOffset(0), &slot, sizeof(INDEXSLOT) );
+    memcpy( (char*)data+getIndexLeafSlotOffset(0), &slot, sizeof(INDEXSLOT) );
     return 0;
 }
 
@@ -1194,12 +1193,11 @@ RC IndexManager::insertVarcharLeafNode(const void *key, const RID &rid, void *da
 
     // get last leaf record
     INDEXSLOT lastSlot;
-    memcpy( &lastSlot, (char*)data+getIndexSlotOffset(slotCount-1), sizeof(INDEXSLOT) );
-
+    memcpy( &lastSlot, (char*)data+getIndexLeafSlotOffset(slotCount-1), sizeof(INDEXSLOT) );
     if(toMoveSlot > 0)
     {
         INDEXSLOT slot;
-        memcpy( &slot, (char*)data+getIndexSlotOffset(insertIdx), sizeof(INDEXSLOT) );
+        memcpy( &slot, (char*)data+getIndexLeafSlotOffset(insertIdx), sizeof(INDEXSLOT) );
         pageOffset = slot.pageOffset;
         RecordMinLen recordSize = slot.recordSize;
 
@@ -1213,7 +1211,7 @@ RC IndexManager::insertVarcharLeafNode(const void *key, const RID &rid, void *da
     // insert after last leaf node
     else
     {
-        pageOffset = lastSlot.pageOffset+lastSlot.recordSize+sizeof(IDX_PAGE_POINTER_TYPE);
+        pageOffset = lastSlot.pageOffset+lastSlot.recordSize+sizeof(RID);
     }
 
     // copy data notice varchar len
@@ -1224,7 +1222,7 @@ RC IndexManager::insertVarcharLeafNode(const void *key, const RID &rid, void *da
     INDEXSLOT insertSlot;
     insertSlot.pageOffset = pageOffset;
     insertSlot.recordSize = varcharSize;
-    memcpy( (char*)data+getIndexSlotOffset(insertIdx), &insertSlot, sizeof(INDEXSLOT) );
+    memcpy( (char*)data+getIndexLeafSlotOffset(insertIdx), &insertSlot, sizeof(INDEXSLOT) );
 
     return 0;
 }
@@ -1236,16 +1234,16 @@ void IndexManager::updateVarcharRestSlots( IDX_PAGE_POINTER_TYPE insertIdx, unsi
     // update slots pageOffset
     for(int idx = insertIdx; idx < slotCount; idx++)
     {
-        memcpy( &slot, (char*)data+getIndexSlotOffset(idx), sizeof(INDEXSLOT) );
+        memcpy( &slot, (char*)data+getIndexLeafSlotOffset(idx), sizeof(INDEXSLOT) );
         slot.pageOffset += dataSize;
-        memcpy( (char*)data+getIndexSlotOffset(idx), &slot, sizeof(INDEXSLOT) );
+        memcpy( (char*)data+getIndexLeafSlotOffset(idx), &slot, sizeof(INDEXSLOT) );
     }
 
     // shift slots for one slot size
     unsigned movedSlotSize = (slotCount - insertIdx)*sizeof(INDEXSLOT);
     
     //! notice is reverse
-    memmove( (char*)data+getIndexSlotOffset(slotCount), (char*)data+getIndexSlotOffset(slotCount-1), movedSlotSize );
+    memmove( (char*)data+getIndexLeafSlotOffset(slotCount), (char*)data+getIndexLeafSlotOffset(slotCount-1), movedSlotSize );
 }
 
 IDX_PAGE_POINTER_TYPE IndexManager::searchVarcharLeafNode(const void *key, void *data, RecordMinLen slotCount){
@@ -1267,14 +1265,14 @@ IDX_PAGE_POINTER_TYPE IndexManager::searchVarcharLeafNode(const void *key, void 
     while( (tail - head) > 1 )
     {
         mid = (head+tail)/2;    
-        memcpy( &slot, (char*)data+getIndexSlotOffset(mid), sizeof(INDEXSLOT) );
+        memcpy( &slot, (char*)data+getIndexLeafSlotOffset(mid), sizeof(INDEXSLOT) );
         memcpy( compareLeft, (char*)data+slot.pageOffset, slot.recordSize );
         //
         if( compareVarcharKey(keyData, compareLeft) )
         {
             if( (mid+1) != tail )
             {
-                memcpy( &slot, (char*)data+getIndexSlotOffset(mid+1), sizeof(INDEXSLOT) );
+                memcpy( &slot, (char*)data+getIndexLeafSlotOffset(mid+1), sizeof(INDEXSLOT) );
                 memcpy( compareRight, (char*)data+slot.pageOffset, slot.recordSize );
                 
                 if( !compareVarcharKey(keyData, compareRight) )
@@ -1299,7 +1297,7 @@ IDX_PAGE_POINTER_TYPE IndexManager::searchVarcharLeafNode(const void *key, void 
     // tail - head == 1 & not matched yet
     if( isMatch == false )
     {
-        memcpy( &slot, (char*)data+getIndexSlotOffset(head), sizeof(INDEXSLOT) );
+        memcpy( &slot, (char*)data+getIndexLeafSlotOffset(head), sizeof(INDEXSLOT) );
         memcpy( compareLeft, (char*)data+slot.pageOffset, slot.recordSize );
 
         if( compareVarcharKey(keyData, compareLeft) )
@@ -1325,7 +1323,7 @@ RC IndexManager::splitVarcharLeafNode(IXFileHandle &ixfileHandle, int curPageId,
     RecordMinLen mid = slotCount/2;
     
     INDEXSLOT slot;
-    memcpy( &slot, (char*)curPage+getIndexSlotOffset(mid), sizeof(INDEXSLOT) );
+    memcpy( &slot, (char*)curPage+getIndexLeafSlotOffset(mid), sizeof(INDEXSLOT) );
     
     // get slot info
     int charLen = getVarcharSize(key);
@@ -1354,8 +1352,9 @@ RC IndexManager::splitVarcharLeafNode(IXFileHandle &ixfileHandle, int curPageId,
     {
         // calculate moveSize
         INDEXSLOT lastSlot;
-        memcpy( &lastSlot, (char*)curPage+getIndexSlotOffset(slotCount-1), sizeof(INDEXSLOT) );
+        memcpy( &lastSlot, (char*)curPage+getIndexLeafSlotOffset(slotCount-1), sizeof(INDEXSLOT) );
         moveSize = lastSlot.pageOffset + lastSlot.recordSize + sizeof(RID) - slot.pageOffset;
+//        cout<<"lastSlot:"<<lastSlot.pageOffset<<","<<lastSlot.recordSize<<endl;
     }
 
     RecordMinLen newFreeSize = PAGE_SIZE - getLeafNodeDirSize() - moveSize - newSlotCount*sizeof(INDEXSLOT);
@@ -1370,23 +1369,25 @@ RC IndexManager::splitVarcharLeafNode(IXFileHandle &ixfileHandle, int curPageId,
     // copy pointer
     memcpy( (char*)newPage+getLeafNodeRightPointerOffset(), (char*)curPage+getLeafNodeRightPointerOffset(), sizeof(IDX_PAGE_POINTER_TYPE) );
 
+    cout<<"pageOffset"<<slot.pageOffset<<"MoveSize"<<moveSize<<endl;
     // move data
     if(moveSize > 0)
     {
         memcpy( newPage, (char*)curPage+slot.pageOffset, moveSize );
         // clear data in cur page
-        memset( (char*)curPage+slot.pageOffset, 0, moveSize);
+//        memset( (char*)curPage+slot.pageOffset, 0, moveSize);
         
         // move slots
-        memcpy( (char*)newPage+getIndexSlotOffset(newSlotCount-1) , (char*)curPage+getIndexSlotOffset(slotCount-1), sizeof(INDEXSLOT)*newSlotCount );
+        memcpy( (char*)newPage+getIndexLeafSlotOffset(newSlotCount-1) , (char*)curPage+getIndexLeafSlotOffset(slotCount-1), sizeof(INDEXSLOT)*newSlotCount );
         // update pageOffset
         INDEXSLOT tmpSlot;
         for(int i=0; i<newSlotCount;i++)
         {
-            memcpy( &tmpSlot, (char*)newPage+getIndexSlotOffset(i), sizeof(INDEXSLOT) );
+            memcpy( &tmpSlot, (char*)newPage+getIndexLeafSlotOffset(i), sizeof(INDEXSLOT) );
             ////here
+//            cout<<tmpSlot.pageOffset<<","<<tmpSlot.recordSize<<endl;
             tmpSlot.pageOffset -= slot.pageOffset;
-            memcpy( (char*)newPage+getIndexSlotOffset(i), &tmpSlot, sizeof(INDEXSLOT) );
+            memcpy( (char*)newPage+getIndexLeafSlotOffset(i), &tmpSlot, sizeof(INDEXSLOT) );
         }
 
     }
@@ -1409,13 +1410,13 @@ RC IndexManager::splitVarcharLeafNode(IXFileHandle &ixfileHandle, int curPageId,
     {
         insertVarcharLeafNode(key, rid, curPage, slotCount);
         slotCount += 1;
-        freeSize -= charLen + sizeof(INDEXSLOT);
+        freeSize -= charLen + sizeof(INDEXSLOT) + sizeof(RID);
     }
     else
     {
         insertVarcharLeafNode(key, rid, newPage, newSlotCount);
         newSlotCount += 1;
-        newFreeSize -= charLen + sizeof(INDEXSLOT);
+        newFreeSize -= charLen + sizeof(INDEXSLOT) + sizeof(RID);
         slotInfos[2] = newFreeSize;
         slotInfos[1] = newSlotCount;
         // move slotinfos
@@ -1778,7 +1779,7 @@ RC IX_ScanIterator::getNextEntry(RID &rid, void *key)
             int keySize;
             void *lowKeyValue;
             
-            memcpy( &slot, (char*)_tmpPage+getIndexSlotOffset(_slotNum), sizeof(INDEXSLOT) );
+            memcpy( &slot, (char*)_tmpPage+getIndexLeafSlotOffset(_slotNum), sizeof(INDEXSLOT) );
             void *data = malloc(slot.recordSize);
             memcpy( data, (char*)_tmpPage+slot.pageOffset, slot.recordSize );
             int compareFlag;
@@ -1792,6 +1793,7 @@ RC IX_ScanIterator::getNextEntry(RID &rid, void *key)
                 keySize = getVarcharSize(_lowKey);
                 lowKeyValue = malloc(keySize);
                 memcpy( lowKeyValue, (char*)_lowKey+sizeof(int), keySize );
+
                 compareFlag = strcmp((const char*)data, (const char*)lowKeyValue);
             }
             
@@ -2128,6 +2130,10 @@ inline unsigned getAuxSlotsSize(){
 
 inline unsigned getIndexSlotOffset(int slotNum) {
     return ( PAGE_SIZE - 3*sizeof(RecordMinLen) - sizeof(INDEXSLOT)*(slotNum + 1) );
+}
+
+inline unsigned getIndexLeafSlotOffset(int slotNum) {
+    return ( PAGE_SIZE - 3*sizeof(RecordMinLen) - sizeof(INDEXSLOT)*(slotNum + 1) - sizeof(IDX_PAGE_POINTER_TYPE) );
 }
 
 inline unsigned getIndexRestSizeOffset() {

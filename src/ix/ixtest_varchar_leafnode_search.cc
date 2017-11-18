@@ -49,7 +49,7 @@ RC testCase_Varchar_Leafnode_Search(const string &indexFileName)
     free(key);
 
     INDEXSLOT slot;
-    memcpy(&slot, (char*)tmpPage+getIndexSlotOffset(0), sizeof(INDEXSLOT) );
+    memcpy(&slot, (char*)tmpPage+getIndexLeafSlotOffset(0), sizeof(INDEXSLOT) );
     assert( slot.pageOffset == 0 && slot.recordSize == 5 && "slot info fail");
     void *data=malloc(5);
     memcpy(data, (char*)tmpPage+slot.pageOffset, slot.recordSize);
@@ -79,7 +79,7 @@ RC testCase_Varchar_Leafnode_Search(const string &indexFileName)
     indexManager->insertVarcharLeafNode(key, rid, tmpPage, 7);
     free(key);
 
-    memcpy(&slot, (char*)tmpPage+getIndexSlotOffset(7), sizeof(INDEXSLOT) );
+    memcpy(&slot, (char*)tmpPage+getIndexLeafSlotOffset(7), sizeof(INDEXSLOT) );
     data=malloc(slot.recordSize);
     memcpy(data, (char*)tmpPage+slot.pageOffset, slot.recordSize);
     cout<<(char*)data<<endl;
@@ -127,7 +127,7 @@ RC testCase_Varchar_Leafnode_Search(const string &indexFileName)
 
     // check page rid
     // check new page
-    memcpy(&slot, (char*)newPage+getIndexSlotOffset(3), sizeof(INDEXSLOT) );
+    memcpy(&slot, (char*)newPage+getIndexLeafSlotOffset(3), sizeof(INDEXSLOT) );
     RID trid;
     memcpy( &trid, (char*)newPage+slot.pageOffset+slot.recordSize, sizeof(RID) );
     cout<<slot.pageOffset<<","<<slot.recordSize<<endl;
