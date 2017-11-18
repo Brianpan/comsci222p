@@ -28,7 +28,7 @@ int testCase_p5(const string &indexFileName,
     RID rid;
     IXFileHandle ixfileHandle;
     IX_ScanIterator ix_ScanIterator;
-    unsigned numOfTuples = 7;
+    unsigned numOfTuples = 50;
     char key[PAGE_SIZE];
     unsigned count = attribute.length;
 

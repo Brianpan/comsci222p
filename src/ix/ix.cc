@@ -934,7 +934,7 @@ RC IndexManager::insertVarLengthEntry(IXFileHandle &ixfileHandle, const void *ke
                             }
                             // should continue to split and go up
                             else
-                            {
+                            {                                
                                 if( nodeType == ROOT_NODE )
                                 {
                                     if( splitVarcharIntermediateNode(ixfileHandle, parentPageNum, parentIdx, &upwardKey, rightPointer, tmpPage, newPage) != 0 )
@@ -959,6 +959,7 @@ RC IndexManager::insertVarLengthEntry(IXFileHandle &ixfileHandle, const void *ke
                                 }
                                 else
                                 {
+                                    cout<<"splitinter"<<endl;
                                     if( splitVarcharIntermediateNode(ixfileHandle, parentPageNum, parentIdx, &upwardKey, rightPointer, tmpPage, newPage) != 0 )
                                     {
                                         success = -1;
@@ -1354,7 +1355,6 @@ RC IndexManager::splitVarcharLeafNode(IXFileHandle &ixfileHandle, int curPageId,
         INDEXSLOT lastSlot;
         memcpy( &lastSlot, (char*)curPage+getIndexLeafSlotOffset(slotCount-1), sizeof(INDEXSLOT) );
         moveSize = lastSlot.pageOffset + lastSlot.recordSize + sizeof(RID) - slot.pageOffset;
-//        cout<<"lastSlot:"<<lastSlot.pageOffset<<","<<lastSlot.recordSize<<endl;
     }
 
     RecordMinLen newFreeSize = PAGE_SIZE - getLeafNodeDirSize() - moveSize - newSlotCount*sizeof(INDEXSLOT);
@@ -1369,7 +1369,6 @@ RC IndexManager::splitVarcharLeafNode(IXFileHandle &ixfileHandle, int curPageId,
     // copy pointer
     memcpy( (char*)newPage+getLeafNodeRightPointerOffset(), (char*)curPage+getLeafNodeRightPointerOffset(), sizeof(IDX_PAGE_POINTER_TYPE) );
 
-    cout<<"pageOffset"<<slot.pageOffset<<"MoveSize"<<moveSize<<endl;
     // move data
     if(moveSize > 0)
     {
@@ -1385,7 +1384,6 @@ RC IndexManager::splitVarcharLeafNode(IXFileHandle &ixfileHandle, int curPageId,
         {
             memcpy( &tmpSlot, (char*)newPage+getIndexLeafSlotOffset(i), sizeof(INDEXSLOT) );
             ////here
-//            cout<<tmpSlot.pageOffset<<","<<tmpSlot.recordSize<<endl;
             tmpSlot.pageOffset -= slot.pageOffset;
             memcpy( (char*)newPage+getIndexLeafSlotOffset(i), &tmpSlot, sizeof(INDEXSLOT) );
         }
@@ -1478,6 +1476,7 @@ RC IndexManager::splitVarcharIntermediateNode(IXFileHandle &ixfileHandle, int cu
     memcpy( &freeSize, (char*)curPage+getIndexRestSizeOffset(), sizeof(RecordMinLen) );
     memcpy( &slotCount, (char*)curPage+getIndexSlotCountOffset(),sizeof(RecordMinLen) );
     
+    // data to insert
     int insertKeyLen = getVarcharSize(*upwardKey);
     void *insertData = malloc(insertKeyLen);
     memcpy( insertData, (char*)(*upwardKey)+sizeof(int), insertKeyLen );
@@ -1569,7 +1568,8 @@ RC IndexManager::splitVarcharIntermediateNode(IXFileHandle &ixfileHandle, int cu
     memcpy( &nextSlot, (char*)tmpSlots+getIndexSlotOffset(mid+1), sizeof(INDEXSLOT) );
     memcpy( &lastSlot, (char*)tmpSlots+getIndexSlotOffset(slotCount), sizeof(INDEXSLOT) );
 
-    RecordMinLen newIndexDataSize = lastSlot.pageOffset + lastSlot.recordSize - nextSlot.pageOffset + sizeof(IDX_PAGE_POINTER_TYPE);
+    // notice left pointer
+    RecordMinLen newIndexDataSize = lastSlot.pageOffset + lastSlot.recordSize - nextSlot.pageOffset + 2*sizeof(IDX_PAGE_POINTER_TYPE);
     
     RecordMinLen newFreeSize = PAGE_SIZE - newIndexDataSize - getAuxSlotsSize() - newSlotCount*sizeof(IDX_PAGE_POINTER_TYPE);
     RecordMinLen newNodeType = INTERMEDIATE_NODE;
@@ -1579,7 +1579,8 @@ RC IndexManager::splitVarcharIntermediateNode(IXFileHandle &ixfileHandle, int cu
     slotInfos[2] = newFreeSize;
     memcpy( (char*)newPage+getNodeTypeOffset(), slotInfos, getAuxSlotsSize() );
     // move data should skip mid node
-    memcpy( (char*)newPage, (char*)tmpData+nextSlot.pageOffset, newIndexDataSize );
+    // should notice left pointer
+    memcpy( (char*)newPage, (char*)tmpData+nextSlot.pageOffset-sizeof(IDX_PAGE_POINTER_TYPE), newIndexDataSize );
     // update slot
     memcpy( (char*)newPage+getIndexSlotOffset(newSlotCount-1), (char*)tmpSlots+getIndexSlotOffset(slotCount), sizeof(INDEXSLOT)*newSlotCount );
     INDEXSLOT tmpSlot;
@@ -1598,7 +1599,7 @@ RC IndexManager::splitVarcharIntermediateNode(IXFileHandle &ixfileHandle, int cu
     // update old page
     slotCount -= newSlotCount;
     RecordMinLen curIndexDataSize = tmpDataSize - newIndexDataSize - midSlot.recordSize;
-    freeSize = PAGE_SIZE - slotCount*sizeof(INDEXSLOT) + curIndexDataSize;
+    freeSize = PAGE_SIZE - slotCount*sizeof(INDEXSLOT) - curIndexDataSize;
     slotInfos[1] = slotCount;
     slotInfos[2] = freeSize;
     memcpy( (char*)curPage+getNodeTypeOffset(), slotInfos, getAuxSlotsSize() );

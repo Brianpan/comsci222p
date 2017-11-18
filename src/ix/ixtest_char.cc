@@ -60,7 +60,6 @@ int testCase_13(const string &indexFileName, const Attribute &attribute)
 
         rc = indexManager->insertEntry(ixfileHandle, attribute, &key, rid);
         assert(rc == success && "indexManager::insertEntry() should not fail.");
-//        cout<<"finished:"<<i<<endl;
         if (count == tested_ascii) {
             numOfTuplesTobeScanned++;
         }

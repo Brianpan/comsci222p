@@ -49,7 +49,7 @@ RC testCase_Varchar_Intermediatenode(const string &indexFileName)
     free(key);
 
     INDEXSLOT slot;
-    memcpy(&slot, (char*)tmpPage+getIndexSlotOffset(0), sizeof(INDEXSLOT) );
+    memcpy(&slot, (char*)tmpPage+getIndexLeafSlotOffset(0), sizeof(INDEXSLOT) );
     assert( slot.pageOffset == 0 && slot.recordSize == 5 && "slot info fail");
     void *data=malloc(5);
     memcpy(data, (char*)tmpPage+slot.pageOffset, slot.recordSize);
