@@ -405,7 +405,7 @@ int IndexManager::traverseFixedLengthNode(IXFileHandle &ixfileHandle, T keyValue
             }
             curPageId = pageNum; 
             memcpy( &nodeType, (char*)idxPage+getNodeTypeOffset(), sizeof(RecordMinLen) );
-            
+            memcpy( &slotCount, (char*)idxPage+getSlotCountOffset(), sizeof(RecordMinLen) );
         }
     }
 
@@ -943,9 +943,9 @@ RC IndexManager::insertVarLengthEntry(IXFileHandle &ixfileHandle, const void *ke
                                         break;
                                     }
 
-                                    leftPointer = parentPageNum;
                                     // insert new root node
                                     int newRootPageId;
+                                    leftPointer = parentPageNum;
                                     if( insertVarcharRootPage(ixfileHandle, leftPointer, rightPointer, newRootPageId, upwardKey, tmpPage) != 0)
                                     {
                                         success = -1;
@@ -959,7 +959,6 @@ RC IndexManager::insertVarLengthEntry(IXFileHandle &ixfileHandle, const void *ke
                                 }
                                 else
                                 {
-                                    cout<<"splitinter"<<endl;
                                     if( splitVarcharIntermediateNode(ixfileHandle, parentPageNum, parentIdx, &upwardKey, rightPointer, tmpPage, newPage) != 0 )
                                     {
                                         success = -1;
@@ -1048,7 +1047,6 @@ int IndexManager::traverseVarcharNode(IXFileHandle &ixfileHandle, const void *ke
         INDEXPOINTER childPointer;
         childPointer = searchVarcharIntermediateNode(key, curPageId, idxPage, 0, slotCount);
 
-
         traversePointerList.push_back(childPointer);
 
         IDX_PAGE_POINTER_TYPE pageNum = childPointer.pageNum;
@@ -1067,7 +1065,7 @@ int IndexManager::traverseVarcharNode(IXFileHandle &ixfileHandle, const void *ke
             }
             curPageId = pageNum; 
             memcpy( &nodeType, (char*)idxPage+getNodeTypeOffset(), sizeof(RecordMinLen) );
-            
+            memcpy( &slotCount, (char*)idxPage+getSlotCountOffset(), sizeof(RecordMinLen) );
         }
     }
 
@@ -1091,6 +1089,7 @@ INDEXPOINTER IndexManager::searchVarcharIntermediateNode(const void* key, int cu
     void *keyData = malloc(charLen);
     memcpy( keyData, (char*)key+sizeof(int), charLen );
 
+    // otherwise
     while( (tail - head) > 1 )
     {
         mid = (head + tail)/2;
@@ -1757,7 +1756,7 @@ RC IX_ScanIterator::getNextEntry(RID &rid, void *key)
         
         if( _slotNum >= slotCount )
         {
-            memcpy( &_pageId, (char*)_tmpPage+getLeafNodeRightPointerOffset(), sizeof(int) );
+        	memcpy( &_pageId, (char*)_tmpPage+getLeafNodeRightPointerOffset(), sizeof(int) );
             // no more pages
             if(_pageId == -1)
             {
@@ -1783,6 +1782,7 @@ RC IX_ScanIterator::getNextEntry(RID &rid, void *key)
             memcpy( &slot, (char*)_tmpPage+getIndexLeafSlotOffset(_slotNum), sizeof(INDEXSLOT) );
             void *data = malloc(slot.recordSize);
             memcpy( data, (char*)_tmpPage+slot.pageOffset, slot.recordSize );
+
             int compareFlag;
 
             if(_lowKey == NULL)
@@ -1794,6 +1794,7 @@ RC IX_ScanIterator::getNextEntry(RID &rid, void *key)
                 keySize = getVarcharSize(_lowKey);
                 lowKeyValue = malloc(keySize);
                 memcpy( lowKeyValue, (char*)_lowKey+sizeof(int), keySize );
+
 
                 compareFlag = strcmp((const char*)data, (const char*)lowKeyValue);
             }
@@ -1822,7 +1823,11 @@ RC IX_ScanIterator::getNextEntry(RID &rid, void *key)
                     if( compareRightFlag < 0 || ( _highKeyInclusive &&(compareRightFlag==0) ) )
                     {
                         memcpy( &rid, (char*)_tmpPage+slot.pageOffset+slot.recordSize, sizeof(RID) );
-                        _slotNum += 1;                        
+                        _slotNum += 1;
+                        // copy data
+                        int kSize = slot.recordSize;
+                        memcpy(key, &kSize, sizeof(int));
+                        memcpy( (char*)key+sizeof(int), data, slot.recordSize );
                     }
 
                     // should stop get next idx
@@ -1897,6 +1902,8 @@ RC IX_ScanIterator::getNextEntry(RID &rid, void *key)
                         {
                             memcpy( &rid, (char*)_tmpPage+getFixedLeafNodeOffset(_slotNum)+sizeof(int), sizeof(RID) );
                             _slotNum += 1;
+                            // copy data
+                            memcpy( (char*)key, &keyValue, sizeof(int) );
                             
                         }
                         else
@@ -1926,7 +1933,7 @@ RC IX_ScanIterator::getNextEntry(RID &rid, void *key)
                     memcpy( &lowKeyValue, _lowKey, sizeof(float) );
                 }
 
-                memcpy( &keyValue, (char*)_tmpPage+getFixedLeafNodeOffset(_slotNum), sizeof(int) );
+                memcpy( &keyValue, (char*)_tmpPage+getFixedLeafNodeOffset(_slotNum), sizeof(float) );
 
                 if( (_lowKey == NULL) || keyValue >= lowKeyValue )
                 {
@@ -1941,7 +1948,9 @@ RC IX_ScanIterator::getNextEntry(RID &rid, void *key)
                         if( (_highKey == NULL) || (keyValue < highKeyValue) || ( (keyValue == highKeyValue) && (keyValue == highKeyValue) ) )
                         {
                             memcpy( &rid, (char*)_tmpPage+getFixedLeafNodeOffset(_slotNum)+sizeof(float), sizeof(RID) );
-                            _slotNum += 1;      
+                            _slotNum += 1;
+                            // copy data
+                            memcpy( (char*)key, &keyValue, sizeof(float) );
                         }
                         else
                         {

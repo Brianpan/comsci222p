@@ -28,7 +28,7 @@ int testCase_p5(const string &indexFileName,
     RID rid;
     IXFileHandle ixfileHandle;
     IX_ScanIterator ix_ScanIterator;
-    unsigned numOfTuples = 50;
+    unsigned numOfTuples = 7;
     char key[PAGE_SIZE];
     unsigned count = attribute.length;
 
@@ -44,6 +44,7 @@ int testCase_p5(const string &indexFileName,
     for(; i <= numOfTuples; i++)
     {
         prepareKeyAndRid(count, i * 10, key, rid);
+
         rc = indexManager->insertEntry(ixfileHandle, attribute, &key, rid);
         assert(rc == success && "indexManager::insertEntry() should not fail.");
     }
@@ -85,10 +86,6 @@ int testCase_p5(const string &indexFileName,
     cerr << "After Initialization of Scan - R:" << readPageCountScan << " W:" << writePageCountScan << " A:" << appendPageCountScan << endl;
  
     count = 0;
-    void *tmpPage = malloc(PAGE_SIZE);
-    ixfileHandle.readPage(0, tmpPage);
-    memcpy(key, (char*)tmpPage, 1024);
-
     while(ix_ScanIterator.getNextEntry(rid, &key) == success)
     {
         cerr << "Returned rid:" << rid.pageNum << "," << rid.slotNum << endl;
