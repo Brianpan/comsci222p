@@ -82,29 +82,29 @@ int testCase_p2(const string &indexFileName1, const string &indexFileName2,
 
     // scan & delete
     count = 0;
-    while(ix_ScanIterator1.getNextEntry(rid, &key) == success)
-    {
-        if (ix_ScanIterator2.getNextEntry(rid2, &key2) != success 
-                || rid.pageNum != rid2.pageNum) {
-            cerr << "Wrong entries output...failure" << endl;
-            goto error_close_scan;
-        }
+     while(ix_ScanIterator1.getNextEntry(rid, &key) == success)
+     {
+         if (ix_ScanIterator2.getNextEntry(rid2, &key2) != success
+                 || rid.pageNum != rid2.pageNum) {
+             cerr << "Wrong entries output...failure" << endl;
+             goto error_close_scan;
+         }
 
-        // delete entry
-        rc = indexManager->deleteEntry(ixfileHandle1, attribute, &key, rid);
-        assert(rc == success && "indexManager::deleteEntry() should not fail.");
+         // delete entry
+         rc = indexManager->deleteEntry(ixfileHandle1, attribute, &key, rid);
+         assert(rc == success && "indexManager::deleteEntry() should not fail.");
 
 
-        rc = indexManager->deleteEntry(ixfileHandle2, attribute, &key, rid);
-        assert(rc == success && "indexManager::deleteEntry() should not fail.");
+         rc = indexManager->deleteEntry(ixfileHandle2, attribute, &key, rid);
+         assert(rc == success && "indexManager::deleteEntry() should not fail.");
 
-        count++;
-    }
-    if (count != 5001)
-    {
-        cerr << count << " - Wrong entries output...failure" << endl;
-        goto error_close_scan;
-    }
+         count++;
+     }
+     if (count != 5001)
+     {
+         cerr << count << " - Wrong entries output...failure" << endl;
+         goto error_close_scan;
+     }
 
     // close scan
     rc = ix_ScanIterator1.close();
@@ -122,18 +122,18 @@ int testCase_p2(const string &indexFileName1, const string &indexFileName2,
     }
     random_shuffle(B, B+numOfTuples);
 
-    for(int i = 0; i < numOfTuples; i++)
-    {
-        key = B[i];
-        rid.pageNum = i+20001;
-        rid.slotNum = i+20001;
+   for(int i = 0; i < numOfTuples; i++)
+   {
+       key = B[i];
+       rid.pageNum = i+20001;
+       rid.slotNum = i+20001;
 
-        rc = indexManager->insertEntry(ixfileHandle1, attribute, &key, rid);
-        assert(rc == success && "indexManager::insertEntry() should not fail.");
+       rc = indexManager->insertEntry(ixfileHandle1, attribute, &key, rid);
+       assert(rc == success && "indexManager::insertEntry() should not fail.");
 
-        rc = indexManager->insertEntry(ixfileHandle2, attribute, &key, rid);
-        assert(rc == success && "indexManager::insertEntry() should not fail.");
-    }
+       rc = indexManager->insertEntry(ixfileHandle2, attribute, &key, rid);
+       assert(rc == success && "indexManager::insertEntry() should not fail.");
+   }
 
     // scan
     compVal = 35000;
@@ -151,18 +151,20 @@ int testCase_p2(const string &indexFileName1, const string &indexFileName2,
             cerr << "Wrong entries output...failure" << endl;
             goto error_close_scan;
         }
-        if(rid.pageNum > 20000 && B[rid.pageNum-20001] > 35000)
-        {
-            cerr << "Wrong entries output...failure" << endl;
-            goto error_close_scan;
-        }
+       if(rid.pageNum > 20000 && B[rid.pageNum-20001] > 35000)
+       {
+           cerr << "Wrong entries output...failure" << endl;
+           goto error_close_scan;
+       }
         count ++;
     }
-    if (count != 30000)
-    {
-        cerr << count << " - Wrong entries output...failure" << endl;
-        goto error_close_scan;
-    }
+
+    cout<<"Count:"<<count<<endl;
+   if (count != 30000)
+   {
+       cerr << count << " - Wrong entries output...failure" << endl;
+       goto error_close_scan;
+   }
 
     //close scan
     rc = ix_ScanIterator1.close();

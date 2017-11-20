@@ -1687,7 +1687,7 @@ RC IndexManager::deleteEntry(IXFileHandle &ixfileHandle, const Attribute &attrib
     {
         // check should change page or not
         
-        if( slotNum >= slotCount )
+        while( slotNum >= slotCount )
         {
             memcpy( &pageId, (char*)tmpPage+getLeafNodeRightPointerOffset(), sizeof(int) );
             // no more pages
@@ -1704,8 +1704,17 @@ RC IndexManager::deleteEntry(IXFileHandle &ixfileHandle, const Attribute &attrib
                     break;
                 }
                 memcpy( &slotCount, (char*)tmpPage+getIndexSlotCountOffset(), sizeof(RecordMinLen) );
-                slotNum = 0;
+                if(slotCount > 0)
+                {    
+                    slotNum = 0;
+                    break;
+                }
             }
+        }
+
+        if(success == -1)
+        {
+            break;
         }
 
         // start check
@@ -1816,6 +1825,7 @@ RC IndexManager::deleteEntry(IXFileHandle &ixfileHandle, const Attribute &attrib
                             unsigned moveSize = (slotCount - 1 - slotNum)*( sizeof(int) + sizeof(RID) );
                             memcpy( (char*)tmpPage+getFixedLeafNodeOffset(slotNum), (char*)tmpPage+getFixedLeafNodeOffset(slotNum+1), moveSize );
                         }
+                        memset( (char*)tmpPage+getFixedLeafNodeOffset(slotCount-1) , 0, sizeof(int)+sizeof(RID));
 
                         slotCount -= 1;
                         RecordMinLen freeSize;
@@ -1868,6 +1878,8 @@ RC IndexManager::deleteEntry(IXFileHandle &ixfileHandle, const Attribute &attrib
                             unsigned moveSize = (slotCount - 1 - slotNum)*( sizeof(int) + sizeof(RID) );
                             memcpy( (char*)tmpPage+getFixedLeafNodeOffset(slotNum), (char*)tmpPage+getFixedLeafNodeOffset(slotNum+1), moveSize );
                         }
+
+                        memset( (char*)tmpPage+getFixedLeafNodeOffset(slotCount-1) , 0, sizeof(float)+sizeof(RID));
 
                         slotCount -= 1;
                         RecordMinLen freeSize;
@@ -2041,9 +2053,9 @@ RC IX_ScanIterator::getNextEntry(RID &rid, void *key)
     {
         // check should change page or not
         
-        if( _slotNum >= slotCount )
+        while( _slotNum >= slotCount )
         {
-        	memcpy( &_pageId, (char*)_tmpPage+getLeafNodeRightPointerOffset(), sizeof(int) );
+            memcpy( &_pageId, (char*)_tmpPage+getLeafNodeRightPointerOffset(), sizeof(int) );
             // no more pages
             if(_pageId == -1)
             {
@@ -2057,10 +2069,21 @@ RC IX_ScanIterator::getNextEntry(RID &rid, void *key)
                     success = -1;
                     break;
                 }
-                _slotNum = 0;
                 memcpy( &slotCount, (char*)_tmpPage+getIndexSlotCountOffset(), sizeof(RecordMinLen) );
+                if(slotCount > 0)
+                {    
+                    _slotNum = 0;
+                    break;
+                }
+                
             }
         }
+
+        if(success == -1)
+        {
+            break;
+        }
+
         // start check
         if(_attribute.type == TypeVarChar)
         {
