@@ -1619,7 +1619,293 @@ RC IndexManager::splitVarcharIntermediateNode(IXFileHandle &ixfileHandle, int cu
 
 RC IndexManager::deleteEntry(IXFileHandle &ixfileHandle, const Attribute &attribute, const void *key, const RID &rid)
 {
-    return -1;
+    // deleting should have a key
+    if(key == NULL)
+        return -1;
+
+    void *tmpPage = malloc(PAGE_SIZE);
+    int curPageId = ixfileHandle.rootPageId;
+    int pageId, slotNum;
+
+    if( ixfileHandle.readPage( curPageId, tmpPage ) != 0 )
+    {
+        free(tmpPage);
+        return -1;
+    }
+    
+    RecordMinLen nodeType;
+    memcpy( &nodeType, (char*)tmpPage+getNodeTypeOffset(), sizeof(RecordMinLen) );
+    RecordMinLen slotCount;
+    memcpy( &slotCount, (char*)tmpPage+getIndexSlotCountOffset(), sizeof(RecordMinLen) );
+
+    INDEXPOINTER indexPointer;
+    // traverse til leaf node
+    while(nodeType != LEAF_NODE)
+    {
+        // search from intermediateNode
+        if( attribute.type == TypeVarChar )
+        {
+           
+            indexPointer = searchVarcharIntermediateNode( key, curPageId, tmpPage, 0, slotCount );
+        }
+        else
+        {
+            if( attribute.type == TypeInt )
+            {
+                int keyValue;
+                
+                memcpy( &keyValue, key, sizeof(int) );
+                indexPointer = searchFixedIntermediateNode<int>( keyValue, curPageId, tmpPage, 0, slotCount );
+            }
+            else
+            {
+                float keyValue;
+                
+                memcpy( &keyValue, key, sizeof(float) );
+                indexPointer = searchFixedIntermediateNode<float>( keyValue, curPageId, tmpPage, 0, slotCount );
+            }
+        }
+        
+        // update curPageId
+        curPageId = indexPointer.pageNum;
+        ixfileHandle.readPage(curPageId, tmpPage);
+
+        memcpy( &nodeType, (char*)tmpPage+getNodeTypeOffset(), sizeof(RecordMinLen) );
+        memcpy( &slotCount, (char*)tmpPage+getIndexSlotCountOffset(), sizeof(RecordMinLen) );
+    }
+
+    pageId = curPageId;
+    slotNum = 0;
+
+    // traverse from leaf nodes
+    memcpy( &slotCount, (char*)tmpPage+getIndexSlotCountOffset(), sizeof(RecordMinLen) );
+
+    INDEXSLOT slot;
+    RC success = 0;
+
+    while(true)
+    {
+        // check should change page or not
+        
+        if( slotNum >= slotCount )
+        {
+            memcpy( &pageId, (char*)tmpPage+getLeafNodeRightPointerOffset(), sizeof(int) );
+            // no more pages
+            if(pageId == -1)
+            {
+                success = -1;
+                break;
+            }
+            else
+            {
+                if( ixfileHandle.readPage(pageId, tmpPage) != 0 )
+                {
+                    success = -1;
+                    break;
+                }
+                memcpy( &slotCount, (char*)tmpPage+getIndexSlotCountOffset(), sizeof(RecordMinLen) );
+                slotNum = 0;
+            }
+        }
+
+        // start check
+        if(attribute.type == TypeVarChar)
+        {
+            int keySize;
+            void *keyValue;
+            
+            memcpy( &slot, (char*)tmpPage+getIndexLeafSlotOffset(slotNum), sizeof(INDEXSLOT) );
+            void *data = malloc(slot.recordSize);
+            memcpy( data, (char*)tmpPage+slot.pageOffset, slot.recordSize );
+
+            int compareFlag;
+
+            keySize = getVarcharSize(key);
+            keyValue = malloc(keySize);
+            memcpy( keyValue, (char*)key+sizeof(int), keySize );
+
+
+            compareFlag = strcmp((const char*)data, (const char*)keyValue);
+           
+            if( compareFlag == 0 )
+            {
+                RID slotRid;
+                memcpy( &slotRid, (char*)tmpPage+slot.pageOffset+slot.recordSize, sizeof(RID) );
+                if( rid.pageNum == slotRid.pageNum && rid.slotNum == slotRid.slotNum )
+                {
+                    // delete record
+                    INDEXSLOT lastSlot;
+                    memcpy( &lastSlot, (char*)tmpPage+getIndexLeafSlotOffset(slotCount-1), sizeof(INDEXSLOT) );
+                    
+                    if( slotNum < (slotCount -1) )
+                    {
+                        INDEXSLOT nextSlot;
+                        memcpy( &nextSlot, (char*)tmpPage+getIndexLeafSlotOffset(slotNum+1), sizeof(INDEXSLOT) );
+
+                        
+                        unsigned moveSize = lastSlot.pageOffset + lastSlot.recordSize + sizeof(RID) - nextSlot.pageOffset;
+
+                        memmove( (char*)tmpPage+slot.pageOffset, (char*)tmpPage+nextSlot.pageOffset, moveSize );
+                        
+                        for(int i =(slotNum+1); i<slotCount; i++ )
+                        {
+                            INDEXSLOT tmpSlot;
+                            memcpy( &tmpSlot, (char*)tmpPage+getIndexLeafSlotOffset(i), sizeof(INDEXSLOT) );
+                            tmpSlot.pageOffset -= slot.recordSize + sizeof(RID);
+                            memcpy( (char*)tmpPage+getIndexLeafSlotOffset(i), &tmpSlot, sizeof(INDEXSLOT) );
+                        }
+                    }
+                    
+                    // add free size & minius slotCount
+                    slotCount -= 1;
+                    RecordMinLen freeSize;
+                    memcpy( &freeSize, (char*)tmpPage+getIndexRestSizeOffset(), sizeof(RecordMinLen) );
+                    freeSize +=  slot.recordSize + sizeof(RID) + sizeof(INDEXSLOT);
+                    RecordMinLen slotInfos[2];
+                    slotInfos[1] = freeSize;
+                    slotInfos[0] = slotCount;
+                    memcpy( (char*)tmpPage+getIndexSlotCountOffset(), slotInfos, sizeof(RecordMinLen)*2 );
+                    ixfileHandle.writePage(pageId, tmpPage);
+                    break;
+                }
+                // rid not matched continue to search
+                else
+                {
+                    free(keyValue);
+                    free(data);
+                    slotNum += 1;
+                    continue;
+                }
+            }
+            else if(compareFlag < 0)
+            {
+                free(keyValue);
+                free(data);
+                slotNum += 1;
+                continue;
+            }
+            // not found matched key
+            else
+            {
+                success = -1;
+                free(keyValue);
+                free(data);
+                break;
+            }
+        }
+
+        else
+        {
+            if( attribute.type == TypeInt )
+            {
+                int targetKeyValue;
+                memcpy( &targetKeyValue, key, sizeof(int) );
+                int keyValue;
+                memcpy( &keyValue, (char*)tmpPage+getFixedLeafNodeOffset(slotNum), sizeof(int) );
+
+                if( targetKeyValue == keyValue )
+                {
+                    RID slotRid;
+                    memcpy( &slotRid, (char*)tmpPage+getFixedLeafNodeOffset(slotNum)+sizeof(int), sizeof(RID) );
+
+                    if(rid.pageNum == slotRid.pageNum && rid.slotNum == slotRid.slotNum)
+                    {
+                        // move data
+                        if( slotNum < (slotCount-1) )
+                        {
+                            unsigned moveSize = (slotCount - 1 - slotNum)*( sizeof(int) + sizeof(RID) );
+                            memcpy( (char*)tmpPage+getFixedLeafNodeOffset(slotNum), (char*)tmpPage+getFixedLeafNodeOffset(slotNum+1), moveSize );
+                        }
+
+                        slotCount -= 1;
+                        RecordMinLen freeSize;
+                        memcpy( &freeSize, (char*)tmpPage+getIndexRestSizeOffset(), sizeof(RecordMinLen) );
+                        freeSize +=  sizeof(RID) + sizeof(int);
+                        RecordMinLen slotInfos[2];
+                        slotInfos[1] = freeSize;
+                        slotInfos[0] = slotCount;
+                        memcpy( (char*)tmpPage+getIndexSlotCountOffset(), slotInfos, sizeof(RecordMinLen)*2 );
+                        ixfileHandle.writePage(pageId, tmpPage);
+                        success = 0;
+                        break;
+                    }
+                    else
+                    {
+                        slotNum += 1;
+                        continue;
+                    }
+
+                }
+                else if(targetKeyValue > keyValue)
+                {
+                    slotNum += 1;
+                    continue;
+                }
+                else
+                {
+                    success = -1;
+                    break;
+                }
+
+            }
+            else
+            {
+                float targetKeyValue;
+                memcpy( &targetKeyValue, key, sizeof(float) );
+                float keyValue;
+                memcpy( &keyValue, (char*)tmpPage+getFixedLeafNodeOffset(slotNum), sizeof(float) );
+
+                if( targetKeyValue == keyValue )
+                {
+                    RID slotRid;
+                    memcpy( &slotRid, (char*)tmpPage+getFixedLeafNodeOffset(slotNum)+sizeof(float), sizeof(RID) );
+
+                    if(rid.pageNum == slotRid.pageNum && rid.slotNum == slotRid.slotNum)
+                    {
+                        // move data
+                        if( slotNum < (slotCount-1) )
+                        {
+                            unsigned moveSize = (slotCount - 1 - slotNum)*( sizeof(int) + sizeof(RID) );
+                            memcpy( (char*)tmpPage+getFixedLeafNodeOffset(slotNum), (char*)tmpPage+getFixedLeafNodeOffset(slotNum+1), moveSize );
+                        }
+
+                        slotCount -= 1;
+                        RecordMinLen freeSize;
+                        memcpy( &freeSize, (char*)tmpPage+getIndexRestSizeOffset(), sizeof(RecordMinLen) );
+                        freeSize +=  sizeof(RID) + sizeof(int);
+                        RecordMinLen slotInfos[2];
+                        slotInfos[1] = freeSize;
+                        slotInfos[0] = slotCount;
+                        memcpy( (char*)tmpPage+getIndexSlotCountOffset(), slotInfos, sizeof(RecordMinLen)*2 );
+
+                        ixfileHandle.writePage(pageId, tmpPage);
+                        success = 0;
+                        break;
+                    }
+                    else
+                    {
+                        slotNum += 1;
+                        continue;
+                    }
+
+                }
+                else if(targetKeyValue > keyValue)
+                {
+                    slotNum += 1;
+                    continue;
+                }
+                else
+                {
+                    success = -1;
+                    break;
+                }
+            }
+        }
+
+    }
+
+    free(tmpPage);
+    return success;
 }
 
 
@@ -1660,6 +1946,7 @@ IX_ScanIterator::IX_ScanIterator()
 
 IX_ScanIterator::~IX_ScanIterator()
 {
+    free(_tmpPage);
 }
 
 RC IX_ScanIterator::getNextEntry(RID &rid, void *key)
@@ -1771,6 +2058,7 @@ RC IX_ScanIterator::getNextEntry(RID &rid, void *key)
                     break;
                 }
                 _slotNum = 0;
+                memcpy( &slotCount, (char*)_tmpPage+getIndexSlotCountOffset(), sizeof(RecordMinLen) );
             }
         }
         // start check
@@ -1978,9 +2266,10 @@ RC IX_ScanIterator::getNextEntry(RID &rid, void *key)
 
 RC IX_ScanIterator::close()
 {
-    free(_tmpPage);
+    _isStart = true;
     return 0;
 }
+
 //// end scanIterator ////
 
 
