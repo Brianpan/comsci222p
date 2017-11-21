@@ -5,7 +5,7 @@ include ../makefile.inc
 # all: libix.a ixtest_search ixtest_leafnode_search ixtest_insert_leafnode ixtest_split_leafnode ixtest_split_intermediatenode ixtest_fixedinsert01 ixtest_fixedinsert02 ixtest_varchar_leafnode_search
 # all: libix.a ixtest_varchar_leafnode_search ixtest_varchar_intermediatenode ixtest_fixed06 ixtest_char
 #all: libix.a ixtest_char ixtest_varchar_intermediatenode ixtest_p5
-all: libix.a ixtest_p1 ixtest_p2
+all: libix.a ixtest_p5 ixtest_p6 ixtest_01 ixtest_02 ixtest_11 ixtest_14 ixtest_15
 #all: ixtest_11 ixtest_12
 # lib file dependencies
 libix.a: libix.a(ix.o)  # and possibly other .o files

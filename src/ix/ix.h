@@ -75,7 +75,10 @@ class IndexManager {
                 IX_ScanIterator &ix_ScanIterator);
 
         // Print the B+ tree in pre-order (in a JSON record format)
-        void printBtree(IXFileHandle &ixfileHandle, const Attribute &attribute) const;
+        void printBtree(IXFileHandle &ixfileHandle, const Attribute &attribute);
+        void printVarcharBtree(IXFileHandle &ixfileHandle, int pageId, int indent);
+        template<class T>
+        void printFixedBtree(IXFileHandle &ixfileHandle, int pageId, int indent);
 
         template<class T>
         INDEXPOINTER searchFixedIntermediateNode(T keyValue, int curPageId, const void *idxPage, RecordMinLen head, RecordMinLen tail);
@@ -244,5 +247,9 @@ unsigned getVarcharKeyPointerOffset( unsigned idx, const void *data );
 unsigned getVarcharKeySize(const void *key);
 // with sizeof(INDEXSLOT)
 unsigned getVarcharTotalKeySize(const void *key);
+
+// print indent
+inline void printIndent(int indent);
+inline void printRid(RID rid);
 
 #endif

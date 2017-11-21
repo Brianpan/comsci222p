@@ -1945,9 +1945,318 @@ RC IndexManager::scan(IXFileHandle &ixfileHandle,
     return 0;
 }
 
-void IndexManager::printBtree(IXFileHandle &ixfileHandle, const Attribute &attribute) const {
+void IndexManager::printBtree(IXFileHandle &ixfileHandle, const Attribute &attribute){
+    int rootPageId = ixfileHandle.rootPageId;
+
+    if( attribute.type == TypeVarChar )
+    {
+        printVarcharBtree( ixfileHandle, rootPageId, 0 );
+    }
+    else
+    {
+        if( attribute.type == TypeInt )
+        {
+            printFixedBtree<int>( ixfileHandle, rootPageId, 0 );
+        }
+        else
+        {
+            printFixedBtree<float>( ixfileHandle, rootPageId, 0 );
+        }
+    }
+
+    
+}
+template<class T>
+void IndexManager::printFixedBtree(IXFileHandle &ixfileHandle, int pageId, int indent){
+    void *tmpPage = malloc(PAGE_SIZE);
+
+    ixfileHandle.readPage(pageId, tmpPage);
+    RecordMinLen nodeType;
+    memcpy( &nodeType, (char*)tmpPage+getNodeTypeOffset(), sizeof(RecordMinLen) );
+    
+    printIndent(indent);
+    cout<<"{";
+    cout<<endl;
+
+    string printMessage = "\"keys\":[";
+    cout<<printMessage;
+    
+    // print key
+    RecordMinLen slotCount;
+    memcpy( &slotCount, (char*)tmpPage+getIndexSlotCountOffset(), sizeof(RecordMinLen) );
+
+    INDEXSLOT slot;
+    if( (nodeType == INTERMEDIATE_NODE) || (nodeType == ROOT_NODE && ixfileHandle.treeHeight > 1) )
+    {
+        for(int i=0;i<slotCount;i++)
+        {
+            T tmpValue;
+            memcpy( &tmpValue, (char*)tmpPage+getFixedKeyOffset(i), sizeof(T));
+            cout<<tmpValue;
+
+            if(  (i != (slotCount-1)) )
+            {
+                cout<<",";
+            }
+        }
+
+        cout<<"],";
+
+        cout<<endl;
+        printIndent(indent);
+        printMessage = "\"children\":[";
+        cout<<printMessage<<endl;
+
+        // print leaf tree 
+        for(int i=0; i<=slotCount;i++)
+        {
+            IDX_PAGE_POINTER_TYPE leafPointer;
+            memcpy( &leafPointer, (char*)tmpPage+getFixedKeyPointerOffset(i), sizeof(IDX_PAGE_POINTER_TYPE) );
+            if(leafPointer >= 0)
+            {    
+                printVarcharBtree(ixfileHandle, leafPointer, (indent+1) );
+            }
+
+            if( i != slotCount )
+            {
+                cout<<",";
+            }
+        }
+
+        printIndent(indent);
+        cout<<"]"<<endl;
+    }
+    // leaf node
+    else
+    {
+        RID tmpRid;
+        T lastValue;
+        for(int i=0;i<slotCount;i++)
+        {
+            if(i==0)
+            {
+                cout<<"\"";
+                memcpy( &lastValue, (char*)tmpPage+getFixedLeafNodeOffset(i), sizeof(T) );
+                cout<<lastValue;
+                cout<<":[";
+                // print rid
+                printRid(tmpRid);
+                if(slotCount == 1)
+                {
+                    cout<<"]\"";
+                }
+            }
+            else
+            {
+                
+                T tmpValue;      
+                memcpy( &tmpValue, (char*)tmpPage+getFixedLeafNodeOffset(i), sizeof(T) );
+                memcpy( &tmpRid, (char*)tmpPage+getFixedLeafNodeOffset(i)+sizeof(T), sizeof(RID) );
+
+                if( tmpValue == lastValue )
+                {
+                    cout<<",";
+                    printRid(tmpRid);
+                }
+                else
+                {
+                    cout<<"]\",";
+                    cout<<"\"";
+                    cout<<tmpValue;
+                    cout<<":[";
+                    // print rid
+                    printRid(tmpRid);
+                    lastValue = tmpValue;
+
+                }
+                               
+                if(i == (slotCount-1))
+                {
+                    cout<<"]\"";
+                }
+            }
+
+        }
+        cout<<"]"<<endl;
+    }
+
+    printIndent(indent);
+    cout<<"}";
+    cout<<endl;
+
+    // free mem
+    free(tmpPage);
 }
 
+void IndexManager::printVarcharBtree(IXFileHandle &ixfileHandle, int pageId, int indent){
+    void *tmpPage = malloc(PAGE_SIZE);
+
+    ixfileHandle.readPage(pageId, tmpPage);
+    RecordMinLen nodeType;
+    memcpy( &nodeType, (char*)tmpPage+getNodeTypeOffset(), sizeof(RecordMinLen) );
+    
+    printIndent(indent);
+    cout<<"{";
+    cout<<endl;
+
+    string printMessage = "\"keys\":[";
+    cout<<printMessage;
+    
+    // print key
+    RecordMinLen slotCount;
+    memcpy( &slotCount, (char*)tmpPage+getIndexSlotCountOffset(), sizeof(RecordMinLen) );
+
+    INDEXSLOT slot;
+    if( (nodeType == INTERMEDIATE_NODE) || (nodeType == ROOT_NODE && ixfileHandle.treeHeight > 1) )
+    {
+        for(int i=0;i<slotCount;i++)
+        {
+            memcpy( &slot, (char*)tmpPage+getIndexSlotOffset(i), sizeof(INDEXSLOT) );
+            char *c = (char*)( (char*)tmpPage+slot.pageOffset );
+            cout<<"\"";
+            for(int p=0;p<slot.recordSize;p++)
+            {
+                cout<<c[p];
+            }
+            cout<<"\"";
+            if(  (i != (slotCount-1)) )
+            {
+                cout<<",";
+            }
+        }
+
+        cout<<"],";
+
+        cout<<endl;
+        printIndent(indent);
+        printMessage = "\"children\":[";
+        cout<<printMessage<<endl;
+
+        // print leaf tree 
+        for(int i=0; i<=slotCount;i++)
+        {
+            IDX_PAGE_POINTER_TYPE leafPointer;
+            memcpy( &leafPointer, (char*)tmpPage+getVarcharKeyPointerOffset(i,tmpPage), sizeof(IDX_PAGE_POINTER_TYPE) );
+            if(leafPointer >= 0)
+            {    
+                printVarcharBtree(ixfileHandle, leafPointer, (indent+1) );
+            }
+
+            if( i != slotCount )
+            {
+                cout<<",";
+            }
+        }
+
+        printIndent(indent);
+        cout<<"]"<<endl;
+    }
+    // leaf node
+    else
+    {
+        char *lastNode = (char*)malloc(PAGE_SIZE);
+        char *curNode = (char*)malloc(PAGE_SIZE);
+        RecordMinLen lastSize;
+        RID tmpRid;
+        for(int i=0;i<slotCount;i++)
+        {
+            memcpy( &slot, (char*)tmpPage+getIndexLeafSlotOffset(i), sizeof(INDEXSLOT) );
+
+            if(i==0)
+            {
+                memset(lastNode, 0, PAGE_SIZE);
+                lastSize = slot.recordSize;
+
+                memcpy( lastNode, (char*)tmpPage+slot.pageOffset, lastSize );
+                memcpy( &tmpRid, (char*)tmpPage+slot.pageOffset+lastSize, sizeof(RID) );
+                cout<<"\"";
+                char *c = (char*)( (char*)tmpPage+slot.pageOffset );
+                for(int p=0;p<slot.recordSize;p++)
+                {
+                    cout<<c[p];
+                }
+                cout<<":[";
+                // print rid
+                printRid(tmpRid);
+                if(slotCount == 1)
+                {
+                    cout<<"]\"";
+                }
+            }
+            else
+            {
+                if(lastSize != slot.recordSize)
+                {
+                    memset(lastNode, 0, PAGE_SIZE);
+                    lastSize = slot.recordSize;
+                    
+                    memcpy( lastNode, (char*)tmpPage+slot.pageOffset, lastSize );
+                    memcpy( &tmpRid, (char*)tmpPage+slot.pageOffset+lastSize, sizeof(RID) );
+
+                    cout<<"]\",";
+                    cout<<"\"";
+                    char *c = (char*)( (char*)tmpPage+slot.pageOffset );
+                    for(int p=0;p<slot.recordSize;p++)
+                    {
+                        cout<<c[p];
+                    }
+                    cout<<":[";
+                    // print rid
+                    printRid(tmpRid);
+
+                }
+                else
+                {
+                    memset(curNode, 0, PAGE_SIZE);                 
+                    memcpy( curNode, (char*)tmpPage+slot.pageOffset, slot.recordSize );
+                    memcpy( &tmpRid, (char*)tmpPage+slot.pageOffset+slot.recordSize, sizeof(RID) );
+
+                    if( strcmp(lastNode, curNode) == 0 )
+                    {
+                        cout<<",";
+                        // print rid
+                        printRid(tmpRid);
+                    }
+                    else
+                    {
+                        cout<<"]\",";
+                        cout<<"\"";
+                        char *c = (char*)( (char*)tmpPage+slot.pageOffset );
+                        for(int p=0;p<slot.recordSize;p++)
+                        {
+                            cout<<c[p];
+                        }
+                        cout<<":[";
+                        // print rid
+                        printRid(tmpRid);
+
+                        // update lastNode
+                        memcpy( lastNode, (char*)tmpPage+slot.pageOffset, lastSize );
+                    }
+                }
+                if(i == (slotCount-1))
+                {
+                    cout<<"]\"";
+                }
+            }
+
+        }
+        cout<<"]"<<endl;
+        free(lastNode);
+        free(curNode);
+    }
+
+
+
+
+    printIndent(indent);
+    cout<<"}";
+    cout<<endl;
+
+    // free mem
+    free(tmpPage);
+    
+}
 
 //// start scanIterator ////
 IX_ScanIterator::IX_ScanIterator()
@@ -2547,4 +2856,17 @@ unsigned getVarcharKeyPointerOffset( unsigned idx, const void *data ){
     RecordMinLen recordSize = slot.recordSize;
 
     return (  pageOffset + recordSize );
+}
+
+inline void printIndent(int indent)
+{
+    for(int i=0;i<indent;i++)
+    {
+        cout<<" ";
+    }
+}
+
+inline void printRid(RID rid){
+    cout<<"(";
+    cout<<rid.pageNum<<","<<rid.slotNum<<")";
 }
