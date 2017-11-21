@@ -45,16 +45,6 @@ int testCase_p5(const string &indexFileName,
     {
         prepareKeyAndRid(count, i * 10, key, rid);
 
-        // int varcharSize = getVarcharSize(key);
-        // // print k
-        // char *c = (char*) ((char*)key+sizeof(int));
-        // cout<<varcharSize<<" ";
-        // for(int i=0;i<varcharSize;i++)
-        // {
-        //     printf("%c", c[i]);
-        // }
-        // cout<<endl;
-        
         rc = indexManager->insertEntry(ixfileHandle, attribute, &key, rid);
         assert(rc == success && "indexManager::insertEntry() should not fail.");
     }

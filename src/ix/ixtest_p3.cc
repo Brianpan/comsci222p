@@ -55,7 +55,7 @@ int testCase_p3(const string &indexFileName, const Attribute &attribute)
     while(ix_ScanIterator.getNextEntry(rid, &key) != IX_EOF)
     {
         key[10] = '\0';
-        if (count % 100 == 0){
+        if (count % 2000 == 0){
             fprintf(stderr,"output: %s\n", key+4);
         }
         count++;
