@@ -15,11 +15,13 @@
 #include <bitset>
 
 #include "../rbf/rbfm.h"
+#include "../ix/ix.h"
 
 using namespace std;
 # define TABLE_SIZE 4096
 # define RM_EOF (-1)  // end of a scan operator
 
+#define INDEXTABLE "indexTable"
 // RM_ScanIterator is an iteratr to go through tuples
 
 //class RM_ScanIterator : public DebugMsg {
@@ -41,6 +43,20 @@ public:
   RC close();
 };
 
+// RM_IndexScanIterator is an iterator to go through index entries
+class RM_IndexScanIterator {
+  public:
+    RM_IndexScanIterator() {};    // Constructor
+    ~RM_IndexScanIterator() {};   // Destructor
+
+    // "key" follows the same format as in IndexManager::insertEntry()
+    RC getNextEntry(RID &rid, void *key);    // Get next matching entry
+    RC close();                 // Terminate index scan
+
+    IX_ScanIterator _ix_scanIter;
+    FileHandle _fileHandle;
+
+};
 
 // Relation Manager
 class RelationManager //: public DebugMsg
@@ -99,6 +115,9 @@ public:
                         bool lowKeyInclusive,
                         bool highKeyInclusive,
                         RM_IndexScanIterator &rm_IndexScanIterator);
+  // create Index Table
+  RC createIndexTable();
+
 // Extra credit work (10 points)
 public:
   RC dropAttribute(const string &tableName, const string &attributeName);
@@ -125,17 +144,6 @@ private:
 
 };
 
-// RM_IndexScanIterator is an iterator to go through index entries
-class RM_IndexScanIterator {
- public:
-  RM_IndexScanIterator() {};    // Constructor
-  ~RM_IndexScanIterator() {};   // Destructor
-
-  // "key" follows the same format as in IndexManager::insertEntry()
-  RC getNextEntry(RID &rid, void *key) {return RM_EOF;};    // Get next matching entry
-  RC close() {return -1;};                  // Terminate index scan
-};
-
-
 bool sortAttr(Attribute a, Attribute b);
+string indexFileName(string tableName, string attributeName);
 #endif

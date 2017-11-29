@@ -332,7 +332,6 @@ RC RelationManager::createTable(const string &tableName, const vector<Attribute>
 	}
 	if(_rbf_manager->createFile(tableName)==0){
 
-
 		if(_rbf_manager->openFile("Tables",filehandle)==0){
 			//f("before get free table id \n");
 			tableid=GetFreeTableid();
@@ -354,7 +353,7 @@ RC RelationManager::createTable(const string &tableName, const vector<Attribute>
 		}
 
 	}
-	assert( false && "There is bug on createTable \n");
+	// assert( false && "There is bug on createTable \n");
 	free(data);
 	return -1;
 }
@@ -685,12 +684,11 @@ RC RelationManager::scan(const string &tableName,
 	  const vector<string> &attributeNames,
 	  RM_ScanIterator &rm_ScanIterator)
 {
-	FileHandle fileHandle;
 	if ( _rbf_manager->openFile( tableName, rm_ScanIterator._fileHandle ) != 0 )
 		return -1;
 	// prepare recordDescriptor
 	vector<Attribute> recordDescriptor;
-	if( getTableAttributes( tableName, recordDescriptor ) != 0)
+	if( getTableAttributes( tableName, recordDescriptor ) != 0 )
 		return -1;
 
 	// set up rm_ScanIterator
@@ -791,6 +789,15 @@ RC RM_ScanIterator::close(){
 	return _rbf_scanIter.close();
 }
 
+
+// RM_IndexScanIterator
+RC RM_IndexScanIterator::getNextEntry(RID &rid, void *key){
+	return -1;
+}
+RC RM_IndexScanIterator::close(){
+	return -1;
+}
+
 // Extra credit work
 RC RelationManager::addAttribute(const string &tableName, const Attribute &attr)
 {
@@ -836,12 +843,135 @@ RC RelationManager::printTable(const string &tableName){
 /***Project 4***/
 RC RelationManager::createIndex(const string &tableName, const string &attributeName)
 {
-	return -1;
+	createIndexTable();
+	// table not exists
+	int tableId = getTableId(tableName);
+	if(  tableId == -1 ){
+		return -1;
+	}
+	vector<Attribute> attrs;
+	getAttributes( tableName, attrs);
+	bool isAttr = false;
+	Attribute indexAttr;
+	for(auto iter=attrs.begin(); iter != attrs.end(); iter++)
+	{
+		if(iter->name == attributeName)
+		{
+			indexAttr = *iter;
+			isAttr = true;
+			break;
+		}
+	}
+	// column not exists
+	if(!isAttr)
+	{
+		return -1;
+	}
+
+	//prepare attribute
+	const char *attrName = attributeName.c_str();
+	int attrSize = sizeof(attrName);
+	unsigned recordSize = 1 + sizeof(int) + (sizeof(int) + attrSize);
+	void *data = malloc(recordSize);
+	RC success = -1;
+
+	// copy data
+	// null bit 0
+	unsigned offset = 0;
+	memset( data, 0, 1);
+	offset += 1;
+	memcpy( (char*)data+offset, &tableId, sizeof(int) );
+	offset += sizeof(int);
+	memcpy( (char*)data+offset, &attrSize, sizeof(int) );
+	offset += sizeof(int);
+	memcpy( (char*)data+offset, attrName, sizeof(attrName) );
+	// end copy data
+
+	const string indexTableName = INDEXTABLE;
+	RID rid;
+	if( insertTuple(indexTableName, data, rid) == 0 )
+	{
+		// create index
+		IndexManager *idxManagerPtr = IndexManager::instance();
+		string tName = tableName;
+		string aName = attributeName;
+		string indexFName = indexFileName(tName, aName);
+		if( !isFileExist(indexFName) )
+			idxManagerPtr->createFile(indexFName);
+
+		success = 0;
+	}
+
+	// free memory
+	free(data);
+	return success;
 }
 
 RC RelationManager::destroyIndex(const string &tableName, const string &attributeName)
 {
-	return -1;
+	createIndexTable();
+	// table not exists
+	int tableId = getTableId(tableName);
+	if(  tableId == -1 ){
+		return -1;
+	}
+	vector<Attribute> attrs;
+	getAttributes( tableName, attrs);
+	bool isAttr = false;
+	Attribute indexAttr;
+	for(auto iter=attrs.begin(); iter != attrs.end(); iter++)
+	{
+		if(iter->name == attributeName)
+		{
+			indexAttr = *iter;
+			isAttr = true;
+			break;
+		}
+	}
+	// column not exists
+	if(!isAttr)
+	{
+		return -1;
+	}
+	vector<string> idxAttrs;
+	idxAttrs.push_back("table-id");
+	idxAttrs.push_back("column-name");
+
+	const char *charColumnName = attributeName.c_str();
+	RM_ScanIterator rmIterator;
+	RID rid;
+
+	RC success = -1;
+	string indexTableName = INDEXTABLE;
+	string colName = "column-name";
+	if( scan( indexTableName, colName, EQ_OP, (void*)charColumnName, idxAttrs, rmIterator) == 0 )
+	{
+
+		void *data = malloc(PAGE_SIZE);
+		IndexManager *idxManagerPtr = IndexManager::instance();
+
+		while( rmIterator.getNextTuple(rid, data) !=RM_EOF )
+		{
+			int recordTableId;
+			memcpy( &recordTableId, (char*)data+1, sizeof(int) );
+			// find the record
+			if(recordTableId == tableId)
+			{
+				if( deleteTuple( INDEXTABLE, rid ) == 0 )
+				{
+					string indexFName = indexFileName(tableName, attributeName);
+					// delete table
+					if( !isFileExist(indexFName) )
+						idxManagerPtr->destroyFile(indexFName);
+
+					success = 0;
+				}
+			}
+		}
+		free(data);
+	}
+
+	return success;
 }
 
 RC RelationManager::indexScan(const string &tableName,
@@ -853,4 +983,35 @@ RC RelationManager::indexScan(const string &tableName,
                       RM_IndexScanIterator &rm_IndexScanIterator)
 {
 	return -1;
+}
+
+// create index table
+RC RelationManager::createIndexTable()
+{
+	const string indexTableName = INDEXTABLE;
+	if( getTableId(indexTableName) == -1 )
+	{
+		vector<Attribute> IndexAttrs;
+		Attribute attr;
+		attr.name = "table-id";
+		attr.type = TypeInt;
+		attr.length = sizeof(int);
+		attr.position = 1;
+		IndexAttrs.push_back(attr);
+
+		attr.name = "column-name";
+		attr.type = TypeVarChar;
+		attr.length = VarChar;
+		attr.position = 2;
+		IndexAttrs.push_back(attr);
+
+		createTable(indexTableName, IndexAttrs);
+	}
+
+	return 0;
+}
+
+// accessory functions
+string indexFileName(string tableName, string attributeName){
+	return (tableName + "_" + attributeName + "index");
 }
