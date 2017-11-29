@@ -1,5 +1,5 @@
 #include "rm.h"
-	
+
 #include <stdio.h>
 #include <assert.h>
 
@@ -90,7 +90,7 @@ RC RelationManager::CreateTablesRecord(void *data,int tableid,const string table
 	int offset=0;
 	int size = tablename.size();
 	char nullind=0;
-	
+
 	//copy null indicator
 	memcpy((char *)data+offset,&nullind,1);
 	offset=offset+1;
@@ -114,7 +114,7 @@ RC RelationManager::CreateTablesRecord(void *data,int tableid,const string table
 	//copyt SystemTable
 	memcpy((char *)data+offset,&systemtable,sizeof(int));
 	offset=offset+sizeof(int);
-	
+
 	////f("\ncreate table record offset is %d\n",offset);
 
 	return 0;
@@ -156,7 +156,7 @@ RC RelationManager::CreateColumnsRecord(void * data,int tableid, Attribute attr,
 	//copy nullflag
 	memcpy((char *)data+offset,&nullflag,sizeof(int));
 	offset=offset+sizeof(int);
-	
+
 	////f("\ncreate column record offset is %d\n",offset);
 
 	return 0;
@@ -174,7 +174,7 @@ RC RelationManager::UpdateColumns(int tableid,vector<Attribute> attributes){
 		for(int i=0;i<size;i++){
 			CreateColumnsRecord(data,tableid,attributes[i],attributes[i].position,0);
 			_rbf_manager->insertRecord(table_filehandle,columndescriptor,data,rid);
-			
+
 			////f("In UpdateColumns\n");
 			_rbf_manager->printRecord(columndescriptor,data);
 		}
@@ -252,7 +252,7 @@ RelationManager* RelationManager::instance()
 }
 
 RelationManager::RelationManager()
-{  
+{
 //    debug = true;
 	_rbf_manager = RecordBasedFileManager::instance();
 }
@@ -278,14 +278,14 @@ RC RelationManager::createCatalog()
 		int tableid=1;
 		int systemtable=1;
 
-		// open table file 
+		// open table file
 		_rbf_manager->openFile("Tables",table_filehandle);
-		
+
 		PrepareCatalogDescriptor("Tables",tablesdescriptor);
 		CreateTablesRecord(data,tableid,"Tables",systemtable);
 		RC rc = _rbf_manager->insertRecord(table_filehandle,tablesdescriptor,data,rid);
 		assert( rc == 0 && "insert table should not fail");
-		
+
 		tableid=2;
 		CreateTablesRecord(data,tableid,"Columns",systemtable);
 		rc = _rbf_manager->insertRecord(table_filehandle,tablesdescriptor,data,rid);
@@ -337,15 +337,15 @@ RC RelationManager::createTable(const string &tableName, const vector<Attribute>
 			//f("before get free table id \n");
 			tableid=GetFreeTableid();
 			//f("table id is %d\n",tableid);
-			
+
 			PrepareCatalogDescriptor("Tables",tablesdescriptor);
 			CreateTablesRecord(data,tableid,tableName,0);
 			RC rc = _rbf_manager->insertRecord(filehandle,tablesdescriptor,data,rid);
 			assert( rc == 0 && "insert table should not fail");
-			
+
 			//f("In createTable\n");
 			_rbf_manager->printRecord(tablesdescriptor,data);
-				
+
 			_rbf_manager->closeFile(filehandle);
 			if(UpdateColumns(tableid,tempattrs)==0){
 				free(data);
@@ -486,7 +486,7 @@ RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &at
 	int nullflag;
 	int offset = 0;
 
-	tableid=getTableId(tableName);  // scan table ID 
+	tableid=getTableId(tableName);  // scan table ID
 
 	if( scan("Columns","table-id",EQ_OP,&tableid,attrname,rm_ScanIterator) == 0 ){
 
@@ -680,8 +680,8 @@ RC RelationManager::readAttribute(const string &tableName, const RID &rid, const
 
 RC RelationManager::scan(const string &tableName,
 	  const string &conditionAttribute,
-	  const CompOp compOp,                  
-	  const void *value,                    
+	  const CompOp compOp,
+	  const void *value,
 	  const vector<string> &attributeNames,
 	  RM_ScanIterator &rm_ScanIterator)
 {
@@ -832,3 +832,25 @@ RC RelationManager::printTable(const string &tableName){
 	return -1;
 }
 */
+
+/***Project 4***/
+RC RelationManager::createIndex(const string &tableName, const string &attributeName)
+{
+	return -1;
+}
+
+RC RelationManager::destroyIndex(const string &tableName, const string &attributeName)
+{
+	return -1;
+}
+
+RC RelationManager::indexScan(const string &tableName,
+                      const string &attributeName,
+                      const void *lowKey,
+                      const void *highKey,
+                      bool lowKeyInclusive,
+                      bool highKeyInclusive,
+                      RM_IndexScanIterator &rm_IndexScanIterator)
+{
+	return -1;
+}

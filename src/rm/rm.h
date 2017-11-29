@@ -85,6 +85,20 @@ public:
   RC printTable(const string &tableName);
 
   RC PrepareCatalogDescriptor(string tablename,vector<Attribute> &attributes);
+
+  // project 4 index
+  RC createIndex(const string &tableName, const string &attributeName);
+
+  RC destroyIndex(const string &tableName, const string &attributeName);
+
+  // indexScan returns an iterator to allow the caller to go through qualified entries in index
+  RC indexScan(const string &tableName,
+                        const string &attributeName,
+                        const void *lowKey,
+                        const void *highKey,
+                        bool lowKeyInclusive,
+                        bool highKeyInclusive,
+                        RM_IndexScanIterator &rm_IndexScanIterator);
 // Extra credit work (10 points)
 public:
   RC dropAttribute(const string &tableName, const string &attributeName);
@@ -108,8 +122,20 @@ private:
 
   RC CreateTablesRecord(void *data,int tableid,string tablename,int systemtable);
   RC CreateColumnsRecord(void * data,int tableid, Attribute attr, int position, int nullflag);
- 
+
 };
+
+// RM_IndexScanIterator is an iterator to go through index entries
+class RM_IndexScanIterator {
+ public:
+  RM_IndexScanIterator() {};    // Constructor
+  ~RM_IndexScanIterator() {};   // Destructor
+
+  // "key" follows the same format as in IndexManager::insertEntry()
+  RC getNextEntry(RID &rid, void *key) {return RM_EOF;};    // Get next matching entry
+  RC close() {return -1;};                  // Terminate index scan
+};
+
 
 bool sortAttr(Attribute a, Attribute b);
 #endif
