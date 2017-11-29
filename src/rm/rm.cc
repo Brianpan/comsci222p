@@ -792,10 +792,14 @@ RC RM_ScanIterator::close(){
 
 // RM_IndexScanIterator
 RC RM_IndexScanIterator::getNextEntry(RID &rid, void *key){
-	return -1;
+	return _ix_scanIter.getNextEntry(rid, key);
 }
+
 RC RM_IndexScanIterator::close(){
-	return -1;
+	_ix_scanIter.close();
+	IndexManager *indexManagerPtr = IndexManager::instance();
+	indexManagerPtr->closeFile(_ixFileHandle);
+	return 0;
 }
 
 // Extra credit work
@@ -982,7 +986,42 @@ RC RelationManager::indexScan(const string &tableName,
                       bool highKeyInclusive,
                       RM_IndexScanIterator &rm_IndexScanIterator)
 {
-	return -1;
+	int tableId = getTableId(tableName);
+
+	if(tableId == -1)
+	{
+		return -1;
+	}
+	// check attribute exist or not
+	vector<Attribute> attrs;
+	getAttributes( tableName, attrs);
+	bool isAttr = false;
+	Attribute indexAttr;
+	for(auto iter=attrs.begin(); iter != attrs.end(); iter++)
+	{
+		if(iter->name == attributeName)
+		{
+			indexAttr = *iter;
+			isAttr = true;
+			break;
+		}
+	}
+	// column not exists
+	if(!isAttr)
+	{
+		return -1;
+	}
+
+	IndexManager *indexManagerPtr = IndexManager::instance();
+	// open file
+	string indexFName = indexFileName(tableName, attributeName);
+
+	if( indexManagerPtr->openFile( indexFName, rm_IndexScanIterator._ixFileHandle ) != 0 )
+		return -1;
+	rm_IndexScanIterator._indexFName = indexFName;
+	RC success = indexManagerPtr->scan( rm_IndexScanIterator._ixFileHandle, indexAttr, lowKey, highKey, lowKeyInclusive, highKeyInclusive, rm_IndexScanIterator._ix_scanIter );
+
+	return success;
 }
 
 // create index table

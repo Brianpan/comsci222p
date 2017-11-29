@@ -54,7 +54,8 @@ class RM_IndexScanIterator {
     RC close();                 // Terminate index scan
 
     IX_ScanIterator _ix_scanIter;
-    FileHandle _fileHandle;
+    IXFileHandle _ixFileHandle;
+    string _indexFName;
 
 };
 
