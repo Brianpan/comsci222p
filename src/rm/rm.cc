@@ -409,6 +409,15 @@ RC RelationManager::deleteTable(const string &tableName)
 	RID rid;
 	int tableid;
 
+	// delete all index first
+	vector<Attribute> recordDescriptor;
+	getAttributes(tableName, recordDescriptor);
+	for(int i=0;i<recordDescriptor.size();i++)
+	{
+		string indexFName = indexFileName(tableName, recordDescriptor[i].name);
+		if( isFileExist(indexFName) )
+			destroyIndex(tableName, recordDescriptor[i].name);
+	}
 	char *data=(char *)malloc(PAGE_SIZE);
 	vector<string> attrname;
 	attrname.push_back("table-id");
@@ -450,8 +459,6 @@ RC RelationManager::deleteTable(const string &tableName)
 					return 0;
 
 				}
-
-
 			}
 
 		}
@@ -584,11 +591,179 @@ RC RelationManager::insertTuple(const string &tableName, const void *data, RID &
 	if( _rbf_manager->insertRecord( fileHandle, recordDescriptor, data, rid ) == 0 )
 	{
 		_rbf_manager->closeFile(fileHandle);
-		return 0;
+		return insertOrDeleteIndex(tableName, data, rid, recordDescriptor, true);
 	}
 
 	_rbf_manager->closeFile(fileHandle);
 	return -1;
+}
+
+RC RelationManager::insertOrDeleteIndex(const string &tableName, const void *data, const RID &rid, const vector<Attribute> recordDescriptor, bool isInsert)
+{
+	// insert index
+	if( tableName != INDEXTABLE )
+	{
+		string indexTableName = INDEXTABLE;
+		int tableId = getTableId(tableName);
+		string tableIdCol = "table-id";
+
+		vector<string> idxAttrs;
+		idxAttrs.push_back("column-position");
+		RM_ScanIterator rmIterator;
+
+		if( scan( indexTableName, tableIdCol, EQ_OP, (void*) &tableId, idxAttrs, rmIterator) == 0 )
+		{
+
+			void *attrData = malloc(PAGE_SIZE);
+
+			vector<Attribute> idxList;
+			RID attrRid;
+			while( rmIterator.getNextTuple(attrRid, attrData) !=RM_EOF )
+			{
+				int colSize;
+				unsigned offset = 1;
+				int colPosition;
+				memcpy( &colPosition, (char*)attrData+offset, sizeof(int) );
+
+				Attribute idxAttr = recordDescriptor[colPosition-1];
+				idxList.push_back(idxAttr);
+			}
+			free(attrData);
+
+			// sort first
+			sort( idxList.begin(), idxList.end(), sortAttr );
+			int totalColSize = recordDescriptor.size();
+			int nullBytes = getActualBytesForNullsIndicator( totalColSize );
+			unsigned char* nullIndicator = (unsigned char*) malloc(nullBytes);
+			memcpy( nullIndicator, (char*)data, nullBytes );
+
+			unsigned offset = nullBytes;
+
+			IndexManager *indexManagerPtr = IndexManager::instance();
+
+			for(int i=0; i< totalColSize;i++)
+			{
+				Attribute tmpAttr = recordDescriptor[i];
+				// check is null
+				int shiftedBit = 8*nullBytes - i - 1;
+				int nullIndex = nullBytes - (int)(shiftedBit/8) - 1;
+				bool isNull = nullIndicator[nullIndex] & (1 << (shiftedBit%8) );
+
+				if( !isNull )
+				{
+					bool isIndex = false;
+					for(int i=0; i<idxList.size();i++)
+					{
+						if(idxList[i].position == tmpAttr.position)
+						{
+							isIndex = true;
+							break;
+						}
+					}
+
+					if( tmpAttr.type == TypeVarChar )
+					{
+						int charLen;
+						memcpy( &charLen, (char*)data+offset, sizeof(int) );
+						int varcharLen = charLen + sizeof(int);
+						// should insert index
+						if(isIndex)
+						{
+							void *idxData = malloc(varcharLen);
+
+							memcpy( idxData, (char*)data+offset, varcharLen );
+
+							string indexFName = indexFileName(tableName, tmpAttr.name);
+							IXFileHandle ixfileHandle;
+							// index file not existed
+							if( indexManagerPtr->openFile(indexFName, ixfileHandle) != 0 )
+							{
+								rmIterator.close();
+								free(idxData);
+								free(nullIndicator);
+								return -1;
+							}
+
+							if( isInsert )
+							{
+								if( indexManagerPtr->insertEntry( ixfileHandle, tmpAttr, idxData, rid ) != 0 )
+								{
+									rmIterator.close();
+									free(idxData);
+									free(nullIndicator);
+									return -1;
+								}
+							}
+							else
+							{
+								if( indexManagerPtr->deleteEntry( ixfileHandle, tmpAttr, idxData, rid ) != 0 )
+								{
+									rmIterator.close();
+									free(idxData);
+									free(nullIndicator);
+									return -1;
+								}
+							}
+							// free/close
+							indexManagerPtr->closeFile(ixfileHandle);
+							free(idxData);
+						}
+						offset += varcharLen;
+					}
+					else
+					{
+						if(isIndex)
+						{
+							void *idxData = malloc(getFixedIndexSize());
+							memcpy( idxData, (char*)data+offset, getFixedIndexSize() );
+
+							string indexFName = indexFileName(tableName, tmpAttr.name);
+							IXFileHandle ixfileHandle;
+
+							// index file not existed
+							if( indexManagerPtr->openFile(indexFName, ixfileHandle) != 0 )
+							{
+								rmIterator.close();
+								free(idxData);
+								free(nullIndicator);
+								return -1;
+							}
+							// use insert or delete
+							if(isInsert)
+							{
+								if( indexManagerPtr->insertEntry( ixfileHandle, tmpAttr, idxData, rid ) != 0 )
+								{
+									rmIterator.close();
+									free(idxData);
+									free(nullIndicator);
+									return -1;
+								}
+								cout<<"insert success:"<<indexFName<<endl;
+							}
+							else
+							{
+								if( indexManagerPtr->deleteEntry( ixfileHandle, tmpAttr, idxData, rid ) != 0 )
+								{
+									rmIterator.close();
+									free(idxData);
+									free(nullIndicator);
+									return -1;
+								}
+							}
+							// free/close
+							indexManagerPtr->closeFile(ixfileHandle);
+							free(idxData);
+						}
+						offset += getFixedIndexSize();
+					}
+				}
+			}
+			rmIterator.close();
+			free(nullIndicator);
+		}
+	}
+
+	return 0;
 }
 
 RC RelationManager::deleteTuple(const string &tableName, const RID &rid)
@@ -601,9 +776,26 @@ RC RelationManager::deleteTuple(const string &tableName, const RID &rid)
 	if ( _rbf_manager->openFile( tableName, fileHandle ) != 0 )
 		return -1;
 
+	// delete Index
+	void *data = malloc(PAGE_SIZE);
+	if( _rbf_manager->readRecord( fileHandle, recordDescriptor, rid, data) != 0 )
+	{
+		_rbf_manager->closeFile(fileHandle);
+		free(data);
+		return -1;
+	}
+
+	// delete index
+	insertOrDeleteIndex(tableName, data, rid, recordDescriptor, false);
+	free(data);
+
 	if( _rbf_manager->deleteRecord( fileHandle, recordDescriptor, rid ) == 0 )
 	{
-		return _rbf_manager->closeFile(fileHandle);
+		if( _rbf_manager->closeFile(fileHandle) != 0 )
+		{
+			return -1;
+		}
+		return 0;
 	}
 
 	_rbf_manager->closeFile(fileHandle);
@@ -620,10 +812,24 @@ RC RelationManager::updateTuple(const string &tableName, const void *data, const
 	if ( _rbf_manager->openFile( tableName, fileHandle ) != 0 )
 		return -1;
 
+	// delete old index
+	void *oldData = malloc(PAGE_SIZE);
+	if( _rbf_manager->readRecord( fileHandle, recordDescriptor, rid, oldData) != 0 )
+	{
+		_rbf_manager->closeFile(fileHandle);
+		free(oldData);
+		return -1;
+	}
+	// delete index
+	insertOrDeleteIndex(tableName, oldData, rid, recordDescriptor, false);
+	free(oldData);
+
 	if( _rbf_manager->updateRecord( fileHandle, recordDescriptor, data, rid ) == 0 )
 	{
 		_rbf_manager->closeFile(fileHandle);
-		return 0;
+
+		// insert new index
+		return insertOrDeleteIndex(tableName, data, rid, recordDescriptor, true);
 	}
 
 	_rbf_manager->closeFile(fileHandle);
@@ -814,7 +1020,7 @@ RC RelationManager::dropAttribute(const string &tableName, const string &attribu
 
 }
 
-/*
+
 RC RelationManager::printTable(const string &tableName){
 	RM_ScanIterator rm_ScanIterator;
 	RID rid;
@@ -829,7 +1035,7 @@ RC RelationManager::printTable(const string &tableName){
 	if( scan(tableName,"",NO_OP,NULL,attrname,rm_ScanIterator)==0 ){
 		while(rm_ScanIterator.getNextTuple(rid,data)!=RM_EOF){
 			//!!!! skip null indicator
-			rbfm->printRecord(recordDescriptor,data);
+			_rbf_manager->printRecord(recordDescriptor,data);
 
 		}
 		free(data);
@@ -842,7 +1048,7 @@ RC RelationManager::printTable(const string &tableName){
 	free(data);
 	return -1;
 }
-*/
+
 
 /***Project 4***/
 RC RelationManager::createIndex(const string &tableName, const string &attributeName)
@@ -874,8 +1080,9 @@ RC RelationManager::createIndex(const string &tableName, const string &attribute
 
 	//prepare attribute
 	const char *attrName = attributeName.c_str();
-	int attrSize = sizeof(attrName);
-	unsigned recordSize = 1 + sizeof(int) + (sizeof(int) + attrSize);
+	int attrSize = attributeName.length();
+	int attrPosition = indexAttr.position;
+	unsigned recordSize = 1 + sizeof(int) + (sizeof(int) + attrSize) + sizeof(int);
 	void *data = malloc(recordSize);
 	RC success = -1;
 
@@ -888,7 +1095,9 @@ RC RelationManager::createIndex(const string &tableName, const string &attribute
 	offset += sizeof(int);
 	memcpy( (char*)data+offset, &attrSize, sizeof(int) );
 	offset += sizeof(int);
-	memcpy( (char*)data+offset, attrName, sizeof(attrName) );
+	memcpy( (char*)data+offset, attrName, attrSize );
+	offset += attrSize;
+	memcpy( (char*)data+offset, &attrPosition, sizeof(int) );
 	// end copy data
 
 	const string indexTableName = INDEXTABLE;
@@ -940,15 +1149,21 @@ RC RelationManager::destroyIndex(const string &tableName, const string &attribut
 	vector<string> idxAttrs;
 	idxAttrs.push_back("table-id");
 	idxAttrs.push_back("column-name");
+	idxAttrs.push_back("column-position");
 
 	const char *charColumnName = attributeName.c_str();
+	int colLen = attributeName.length();
+	void *charColumnData = malloc(colLen+sizeof(int));
+	memcpy( charColumnData, &colLen, sizeof(int) );
+	memcpy( (char*)charColumnData+sizeof(int), charColumnName, colLen );
+
 	RM_ScanIterator rmIterator;
 	RID rid;
 
 	RC success = -1;
 	string indexTableName = INDEXTABLE;
 	string colName = "column-name";
-	if( scan( indexTableName, colName, EQ_OP, (void*)charColumnName, idxAttrs, rmIterator) == 0 )
+	if( scan( indexTableName, colName, EQ_OP, charColumnData, idxAttrs, rmIterator) == 0 )
 	{
 
 		void *data = malloc(PAGE_SIZE);
@@ -965,7 +1180,7 @@ RC RelationManager::destroyIndex(const string &tableName, const string &attribut
 				{
 					string indexFName = indexFileName(tableName, attributeName);
 					// delete table
-					if( !isFileExist(indexFName) )
+					if( isFileExist(indexFName) )
 						idxManagerPtr->destroyFile(indexFName);
 
 					success = 0;
@@ -973,7 +1188,10 @@ RC RelationManager::destroyIndex(const string &tableName, const string &attribut
 			}
 		}
 		free(data);
+		rmIterator.close();
 	}
+
+	free(charColumnData);
 
 	return success;
 }
@@ -1044,6 +1262,12 @@ RC RelationManager::createIndexTable()
 		attr.position = 2;
 		IndexAttrs.push_back(attr);
 
+		attr.name = "column-position";
+		attr.type = TypeInt;
+		attr.length = sizeof(int);
+		attr.position = 3;
+		IndexAttrs.push_back(attr);
+
 		createTable(indexTableName, IndexAttrs);
 	}
 
@@ -1052,5 +1276,5 @@ RC RelationManager::createIndexTable()
 
 // accessory functions
 string indexFileName(string tableName, string attributeName){
-	return (tableName + "_" + attributeName + "index");
+	return (tableName + "_" + attributeName + "_Index");
 }

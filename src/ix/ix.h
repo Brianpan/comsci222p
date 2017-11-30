@@ -89,10 +89,10 @@ class IndexManager {
 
         template<class T>
         RC splitFixedLeafNode(IXFileHandle &ixfileHandle, int curPageId, int &newPageId, T keyValue, const RID &rid, T &upwardKey, void *curPage, void *newPage);
-        
+
         template<class T>
         RC insertRootPage(IXFileHandle &ixfileHandle, int leftPagePointer, int rightPagePointer, int &newRootPageId, T upwardKey, void *newRootPage);
-    
+
         template<class T>
         RC splitFixedIntermediateNode(IXFileHandle &ixfileHandle, int curPageId, int insertIdx, T &upwardKey, IDX_PAGE_POINTER_TYPE &rightPointer, void *curPage, void *newPage);
 
@@ -102,14 +102,14 @@ class IndexManager {
 
         RC insertVarcharLeafNode(const void *key, const RID &rid, void *data, RecordMinLen slotCount);
         void updateVarcharRestSlots(IDX_PAGE_POINTER_TYPE insertIdx, unsigned dataSize, RecordMinLen slotCount, void *data);
-        
+
         IDX_PAGE_POINTER_TYPE searchVarcharLeafNode(const void *key, void *data, RecordMinLen slotCount);
 
         RC splitVarcharLeafNode(IXFileHandle &ixfileHandle, int curPageId, int &newPageId, const void *key, const RID &rid, void **upwardKey, void *curPage, void *newPage);
         RC insertVarcharRootPage(IXFileHandle &ixfileHandle, int leftPagePointer, int rightPagePointer, int &newRootPageId, void *upwardKey, void *newRootPage);
-            
+
         RC splitVarcharIntermediateNode(IXFileHandle &ixfileHandle, int curPageId, int insertIdx, void **upwardKey, IDX_PAGE_POINTER_TYPE &rightPointer, void *curPage, void *newPage);
-        
+
         template<class T>
         bool compareKey(T keyValue, T toCompareValue);
 
@@ -126,13 +126,13 @@ class IndexManager {
         RC createFixedNewLeafNode(void *data, const void *key, const RID &rid);
         template<class T>
         int traverseFixedLengthNode(IXFileHandle &ixfileHandle, T keyValue, int &curPageId, void *idxPage, vector<INDEXPOINTER> &traversePointerList);
-        
+
         int traverseVarcharNode(IXFileHandle &ixfileHandle, const void *key, int &curPageId, void *idxPage, vector<INDEXPOINTER> &traversePointerList);
 
         RC updateParentPointer( IXFileHandle &ixfileHandle, INDEXPOINTER indexPointer, IDX_PAGE_POINTER_TYPE pageNum );
         RC updateVarcharParentPointer( IXFileHandle &ixfileHandle, INDEXPOINTER indexPointer, IDX_PAGE_POINTER_TYPE pageNum );
 
-        
+
 };
 
 

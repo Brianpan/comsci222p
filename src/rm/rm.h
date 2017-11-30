@@ -104,6 +104,8 @@ public:
   RC PrepareCatalogDescriptor(string tablename,vector<Attribute> &attributes);
 
   // project 4 index
+  RC insertOrDeleteIndex(const string &tableName, const void *data, const RID &rid, const vector<Attribute> recordDescriptor, bool isInsert);
+
   RC createIndex(const string &tableName, const string &attributeName);
 
   RC destroyIndex(const string &tableName, const string &attributeName);
