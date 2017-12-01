@@ -738,7 +738,6 @@ RC RelationManager::insertOrDeleteIndex(const string &tableName, const void *dat
 									free(nullIndicator);
 									return -1;
 								}
-								cout<<"insert success:"<<indexFName<<endl;
 							}
 							else
 							{
@@ -896,10 +895,6 @@ RC RelationManager::scan(const string &tableName,
 	vector<Attribute> recordDescriptor;
 	if( getTableAttributes( tableName, recordDescriptor ) != 0 )
 		return -1;
-
-	// set up rm_ScanIterator
-//	rm_ScanIterator._fileHandle = fileHandle;
-//	rm_ScanIterator._rbf_scanIter._fileHandlePtr = &rm_ScanIterator._fileHandle;
 
 	// run record scan
 	RC success = _rbf_manager->scan( rm_ScanIterator._fileHandle, recordDescriptor, conditionAttribute, compOp, value, attributeNames, rm_ScanIterator._rbf_scanIter );

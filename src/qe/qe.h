@@ -88,7 +88,9 @@ class TableScan : public Iterator
 
         RC getNextTuple(void *data)
         {
-            return iter->getNextTuple(rid, data);
+            //
+        	RC success = iter->getNextTuple(rid, data);
+            return success;
         };
 
         void getAttributes(vector<Attribute> &attrs) const
@@ -196,11 +198,18 @@ class Filter : public Iterator {
         Filter(Iterator *input,               // Iterator of input R
                const Condition &condition     // Selection condition
         );
-        ~Filter(){};
+        ~Filter();
 
-        RC getNextTuple(void *data) {return QE_EOF;};
+        RC getNextTuple(void *data);
         // For attribute in vector<Attribute>, name it as rel.attr
-        void getAttributes(vector<Attribute> &attrs) const{};
+        void getAttributes(vector<Attribute> &attrs) const;
+
+    private:
+        Iterator *_inputIterator;
+        Condition _condition;
+        int _attrPosition;
+        Attribute _filterAttribute;
+        vector<Attribute> _attributes;
 };
 
 
@@ -289,4 +298,7 @@ class Aggregate : public Iterator {
         void getAttributes(vector<Attribute> &attrs) const{};
 };
 
+// accessory functions
+int getAttributePosition(const vector<Attribute> attrs, const string attrName);
+bool getColumnData(const void *data, void *columnData, const vector<Attribute> attrs, int attrPosition );
 #endif

@@ -15,6 +15,21 @@ RC testCase_3() {
 	cerr << endl << "***** In QE Test Case 3 *****" << endl;
 	RC rc = success;
 
+	// fileHanle
+	// FileHandle fileHandle;
+	// RecordBasedFileManager *rbfm = RecordBasedFileManager::instance();
+	// string fileName = "left";
+	// rbfm->openFile(fileName, fileHandle);
+	// int totalPage = fileHandle.getNumberOfPages();
+	// cout<<totalPage<<endl;
+
+	// RecordMinLen slotCount;
+	// void *dataz = malloc(PAGE_SIZE);
+	// fileHandle.readPage(0, dataz);
+	// memcpy(&slotCount, (char*)dataz+getSlotCountOffset(), sizeof(RecordMinLen));
+	// free(dataz);
+	// cout<<slotCount<<"-----"<<endl;
+	//
 	TableScan *ts = new TableScan(*rm, "left");
 	int compVal = 30;
 	int valueB = 0;
@@ -39,10 +54,10 @@ RC testCase_3() {
 	// Go over the data through iterator
 	void *data = malloc(bufSize);
 	bool nullBit = false;
-	
+
 	int valueA = 0;
 	float valueC = 0.0;
-	
+
 	while (filter->getNextTuple(data) != QE_EOF) {
 		int offset = 0;
 		// Print left.A
@@ -87,7 +102,7 @@ RC testCase_3() {
 			goto clean_up;
 		}
 		valueC = *(float *)((char *)data+1+offset);
-		
+
 		// Print left.C
 		cerr << "  left.C " << valueC << endl;
 		offset += sizeof(float);
