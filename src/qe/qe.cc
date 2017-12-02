@@ -452,7 +452,7 @@ void BNLJoin::getAttributes(vector<Attribute> &attrs) const{
 }
 
 RC BNLJoin::loadLeftMap(){
-	RC success = 0;
+	RC success = -1;
 
 	// init _leftMap
 	_freeSize = _numPages*PAGE_SIZE;
