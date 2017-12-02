@@ -673,6 +673,187 @@ int BNLJoin::getRecordSize(const void *data, const vector<Attribute> attrs){
 
 	return recordSize;
 }
+
+//INLJoin
+INLJoin::INLJoin(Iterator *leftIn, IndexScan *rightIn,
+		const Condition &condition)
+	:_leftItr(leftIn), _rightItr(rightIn)
+{
+	_attrs.clear();
+	_leftAttrs.clear();
+	_rightAttrs.clear();
+
+	leftIn->getAttributes(_leftAttrs);
+	rightIn->getAttributes(_rightAttrs);
+
+	for (unsigned i = 0; i < _leftAttrs.size(); i++) {
+		_attrs.push_back(_leftAttrs[i]);
+
+		if (_leftAttrs[i].name.compare(condition.lhsAttr) == 0) {
+			_leftAttrPos = i;
+			_type = _leftAttrs[i].type;
+			_leftValue = malloc(_leftAttrs[i].length + sizeof(int));
+		}
+	}
+
+	for (unsigned i = 0; i < _rightAttrs.size(); i++) {
+		_attrs.push_back(_rightAttrs[i]);
+	}
+
+	_op = condition.op;
+
+	_leftTuple = malloc(PAGE_SIZE);
+	_rightTuple = malloc(PAGE_SIZE);
+
+	_leftHalf = false;
+
+	_isEnd = _leftItr->getNextTuple(_leftTuple);
+
+	if (_isEnd != QE_EOF) {
+		readField(_leftTuple, _leftValue, _leftAttrs, _leftAttrPos, _type);
+
+		void *lowKey = NULL;
+		void *highKey = NULL;
+		bool lowKeyInclusive = false;
+		bool highKeyInclusive = false;
+
+		setCondition(_op, &lowKey, &highKey, lowKeyInclusive, highKeyInclusive);
+		_rightItr->setIterator(lowKey, highKey, lowKeyInclusive,
+				highKeyInclusive);
+
+		_leftHalf = true;
+	}
+}
+
+INLJoin::~INLJoin() {
+	free(_leftValue);
+
+	free(_leftTuple);
+	free(_rightTuple);
+}
+
+RC INLJoin::getNextTuple(void *data) {
+	if (_isEnd == QE_EOF)
+		return _isEnd;
+
+	RC isSuccess = 0;
+
+	do {
+		isSuccess = _rightItr->getNextTuple(_rightTuple);
+
+		if (isSuccess == QE_EOF && _leftHalf && _op == NE_OP) {
+			void *lowKey = NULL;
+			void *highKey = NULL;
+			bool lowKeyInclusive = false;
+			bool highKeyInclusive = false;
+
+			setCondition(_op, &lowKey, &highKey, lowKeyInclusive,
+					highKeyInclusive);
+			_rightItr->setIterator(lowKey, highKey, lowKeyInclusive,
+					highKeyInclusive);
+
+			_leftHalf = false;
+		}
+
+		else if (isSuccess == QE_EOF) {
+			_isEnd = _leftItr->getNextTuple(_leftTuple);
+
+			if (_isEnd == QE_EOF)
+				return _isEnd;
+
+			readField(_leftTuple, _leftValue, _leftAttrs, _leftAttrPos, _type);
+
+			void *lowKey = NULL;
+			void *highKey = NULL;
+			bool lowKeyInclusive = false;
+			bool highKeyInclusive = false;
+
+			setCondition(_op, &lowKey, &highKey, lowKeyInclusive,
+					highKeyInclusive);
+			_rightItr->setIterator(lowKey, highKey, lowKeyInclusive,
+					highKeyInclusive);
+
+			_leftHalf = true;
+		}
+
+	} while (isSuccess == QE_EOF);
+
+	int leftTupleLength = getTupleLength(_leftTuple, _leftAttrs);
+	int rightTupleLength = getTupleLength(_rightTuple, _rightAttrs);
+
+	memcpy((char*)data, _leftTuple, leftTupleLength);
+	memcpy((char*)data + leftTupleLength, _rightTuple, rightTupleLength);
+
+	return isSuccess;
+
+}
+
+void INLJoin::getAttributes(vector<Attribute> &attrs) const {
+	attrs.clear();
+	attrs = this->_attrs;
+}
+
+void INLJoin::setCondition(CompOp op, void **lowKey, void **highKey,
+		bool &lowKeyInclusive, bool &highKeyInclusive) {
+	switch (op) {
+	case EQ_OP: {
+		*lowKey = _leftValue;
+		*highKey = _leftValue;
+		lowKeyInclusive = true;
+		highKeyInclusive = true;
+		break;
+	}
+	case LT_OP: {
+		*lowKey = _leftValue;
+		*highKey = NULL;
+		lowKeyInclusive = false;
+		highKeyInclusive = false;
+		break;
+	}
+	case GT_OP: {
+		*lowKey = NULL;
+		*highKey = _leftValue;
+		lowKeyInclusive = false;
+		highKeyInclusive = false;
+		break;
+	}
+	case LE_OP: {
+		*lowKey = _leftValue;
+		*highKey = NULL;
+		lowKeyInclusive = true;
+		highKeyInclusive = false;
+		break;
+	}
+	case GE_OP: {
+		*lowKey = NULL;
+		*highKey = _leftValue;
+		lowKeyInclusive = true;
+		highKeyInclusive = false;
+		break;
+	}
+	case NO_OP: {
+		*lowKey = NULL;
+		*highKey = NULL;
+		lowKeyInclusive = false;
+		highKeyInclusive = false;
+		break;
+	}
+	case NE_OP: {
+		if (_leftHalf) {
+			*lowKey = _leftValue;
+			*highKey = NULL;
+		} else {
+			*lowKey = NULL;
+			*highKey = _leftValue;
+		}
+		lowKeyInclusive = false;
+		highKeyInclusive = false;
+		break;
+	}
+	}
+}
+
+
 // accessory function
 int getAttributePosition(const vector<Attribute> attrs, const string attrName)
 {
@@ -752,4 +933,158 @@ int getColumnData( const void *data, void *columnData, const vector<Attribute> a
 
 	free(nullIndicator);
 	return columnSize;
+}
+
+void readField(const void *input, void *data, vector<Attribute> attrs,
+		int attrPos, AttrType type) {
+	int offset = 0;
+	int attrLength = 0;
+
+	for (int i = 0; i < attrPos; i++) {
+		if (attrs[i].type == TypeInt)
+			offset += sizeof(int);
+		else if (attrs[i].type == TypeReal)
+			offset += sizeof(float);
+		else {
+			int stringLength = *(int *) ((char *) input + offset);
+			offset += sizeof(int) + stringLength;
+		}
+	}
+
+	if (type == TypeInt) {
+		attrLength = sizeof(int);
+	} else if (type == TypeReal) {
+		attrLength = sizeof(float);
+	} else {
+		attrLength = *(int *) ((char *) input + offset) + sizeof(int);
+	}
+
+	memcpy(data, (char *) input + offset, attrLength);
+}
+
+int getTupleLength(const void *tuple, vector<Attribute> attrs) {
+	int result = 0;
+
+	for (unsigned i = 0; i < attrs.size(); i++) {
+		if (attrs[i].type == TypeInt)
+			result += sizeof(int);
+		else if (attrs[i].type == TypeReal)
+			result += sizeof(float);
+		else {
+			int stringLength = *(int *) ((char *) tuple + result);
+			result += sizeof(int) + stringLength;
+		}
+	}
+
+	return result;
+}
+
+bool compareField(const void *attribute, const void *condition, AttrType type,
+		CompOp compOp) {
+	if (condition == NULL)
+		return true;
+
+	bool result = true;
+
+	switch (type) {
+	case TypeInt: {
+		int attr = *(int *) attribute;
+		int cond = *(int *) condition;
+
+		switch (compOp) {
+		case EQ_OP:
+			result = attr == cond;
+			break;
+		case LT_OP:
+			result = attr < cond;
+			break;
+		case GT_OP:
+			result = attr > cond;
+			break;
+		case LE_OP:
+			result = attr <= cond;
+			break;
+		case GE_OP:
+			result = attr >= cond;
+			break;
+		case NE_OP:
+			result = attr != cond;
+			break;
+		case NO_OP:
+			break;
+		}
+
+		break;
+	}
+
+	case TypeReal: {
+		float attr = *(float *) attribute;
+		float cond = *(float *) condition;
+
+		int temp = 0;
+
+		if (attr - cond > 0.00001) //use approximate comparison for real value
+			temp = 1;
+		else if (attr - cond < -0.00001)
+			temp = -1;
+
+		switch (compOp) {
+		case EQ_OP:
+			result = temp == 0;
+			break;
+		case LT_OP:
+			result = temp < 0;
+			break;
+		case GT_OP:
+			result = temp > 0;
+			break;
+		case LE_OP:
+			result = temp <= 0;
+			break;
+		case GE_OP:
+			result = temp >= 0;
+			break;
+		case NE_OP:
+			result = temp != 0;
+			break;
+		case NO_OP:
+			break;
+		}
+
+		break;
+	}
+
+	case TypeVarChar: {
+		int attriLeng = *(int *) attribute;
+		string attr((char *) attribute + sizeof(int), attriLeng);
+		int condiLeng = *(int *) condition;
+		string cond((char *) condition + sizeof(int), condiLeng);
+
+		switch (compOp) {
+		case EQ_OP:
+			result = strcmp(attr.c_str(), cond.c_str()) == 0;
+			break;
+		case LT_OP:
+			result = strcmp(attr.c_str(), cond.c_str()) < 0;
+			break;
+		case GT_OP:
+			result = strcmp(attr.c_str(), cond.c_str()) > 0;
+			break;
+		case LE_OP:
+			result = strcmp(attr.c_str(), cond.c_str()) <= 0;
+			break;
+		case GE_OP:
+			result = strcmp(attr.c_str(), cond.c_str()) >= 0;
+			break;
+		case NE_OP:
+			result = strcmp(attr.c_str(), cond.c_str()) != 0;
+			break;
+		case NO_OP:
+			break;
+		}
+
+		break;
+	}
+	}
+	return result;
 }

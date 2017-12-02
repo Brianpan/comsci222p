@@ -276,15 +276,47 @@ class BNLJoin : public Iterator {
 class INLJoin : public Iterator {
     // Index nested-loop join operator
     public:
+
+        /*
         INLJoin(Iterator *leftIn,           // Iterator of input R
                IndexScan *rightIn,          // IndexScan Iterator of input S
                const Condition &condition   // Join condition
-        ){};
-        ~INLJoin(){};
+        );
+        */
+        INLJoin(Iterator *leftIn,                               // Iterator of input R
+            IndexScan *rightIn,                             // IndexScan Iterator of input S
+            const Condition &condition );                    // Join condition
+            //const unsigned numPages                         // Number of pages can be used to do join (decided by the optimizer)
+        //);
 
-        RC getNextTuple(void *data){return QE_EOF;};
+        ~INLJoin();
+
+        RC getNextTuple(void *data);  //{return QE_EOF;};
         // For attribute in vector<Attribute>, name it as rel.attr
-        void getAttributes(vector<Attribute> &attrs) const{};
+        void getAttributes(vector<Attribute> &attrs) const;   //{};
+
+    private:
+            Iterator *_leftItr;
+            IndexScan *_rightItr;
+
+            void *_leftValue;
+            void *_leftTuple;
+            void *_rightTuple;
+
+            CompOp _op;
+            AttrType _type;
+            unsigned _leftAttrPos;
+            vector<Attribute> _attrs;
+            vector<Attribute> _leftAttrs;
+            vector<Attribute> _rightAttrs;
+
+            RC _isEnd;
+            bool _leftHalf; // for NE_OP;
+
+            void setCondition(CompOp op, void **lowKey, void **highKey,
+                bool &lowKeyInclusive, bool &highKeyInclusive);
+
+
 };
 
 // Optional for everyone. 10 extra-credit points
@@ -332,4 +364,11 @@ class Aggregate : public Iterator {
 // accessory functions
 int getAttributePosition(const vector<Attribute> attrs, const string attrName);
 int getColumnData(const void *data, void *columnData, const vector<Attribute> attrs, int attrPosition );
+
+// for INLJ
+void readField(const void *input, void *data, vector<Attribute> attrs,
+        int attrPos, AttrType type);
+int getTupleLength(const void *tuple, vector<Attribute> attrs);
+bool compareField(const void *attribute, const void *condition, AttrType type,
+        CompOp compOp);
 #endif
