@@ -8,6 +8,7 @@
 #include "../ix/ix.h"
 
 #define QE_EOF (-1)  // end of the index scan
+#define NULL_KEY "NULL_KEY"
 
 using namespace std;
 
@@ -23,6 +24,10 @@ struct Value {
     void     *data;         // value
 };
 
+struct JoinMapValue{
+    void    *data;
+    int     size;
+};
 
 struct Condition {
     string  lhsAttr;        // left-hand side attribute
@@ -239,12 +244,32 @@ class BNLJoin : public Iterator {
                const Condition &condition,   // Join condition
                const unsigned numPages       // # of pages that can be loaded into memory,
 			                                 //   i.e., memory block size (decided by the optimizer)
-        ){};
-        ~BNLJoin(){};
+        );
+        ~BNLJoin();
 
-        RC getNextTuple(void *data){return QE_EOF;};
+        RC getNextTuple(void *data);
         // For attribute in vector<Attribute>, name it as rel.attr
-        void getAttributes(vector<Attribute> &attrs) const{};
+        void getAttributes(vector<Attribute> &attrs) const;
+
+    private:
+        Iterator *_leftIn;
+        TableScan *_rightIn;
+        unsigned _numPages;
+        int _freeSize;
+        bool _shouldReloadMap;
+        bool _shouldGetNextRight;
+        vector<JoinMapValue> _curLeftValues;
+
+
+        vector<Attribute> _leftAttributes;
+        vector<Attribute> _rightAttributes;
+        vector<Attribute> _attributes;
+        Condition _condition;
+        unordered_map<string, vector<JoinMapValue>> _leftMap;
+
+        RC loadLeftMap();
+        int getRecordSize(const void *data, const vector<Attribute> attrs);
+        void createJoinRecord(void *data, JoinMapValue leftValue, const void *rightData);
 };
 
 
