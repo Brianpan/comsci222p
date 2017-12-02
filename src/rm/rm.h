@@ -107,6 +107,7 @@ public:
   RC insertOrDeleteIndex(const string &tableName, const void *data, const RID &rid, const vector<Attribute> recordDescriptor, bool isInsert);
 
   RC createIndex(const string &tableName, const string &attributeName);
+  RC insertRecordIndex(const RID &rid, const void *data, const vector<Attribute> recordDescriptor, int attrPosition, const string indexFName);
 
   RC destroyIndex(const string &tableName, const string &attributeName);
 

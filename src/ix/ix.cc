@@ -97,7 +97,6 @@ RC IndexManager::insertEntry(IXFileHandle &ixfileHandle, const Attribute &attrib
     AttrType idxAttrType = attribute.type;
     int rootPageId = ixfileHandle.rootPageId;
 
-
     if( idxAttrType == TypeReal )
     {
         if( rootPageId == -1 )

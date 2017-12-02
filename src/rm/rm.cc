@@ -757,9 +757,9 @@ RC RelationManager::insertOrDeleteIndex(const string &tableName, const void *dat
 					}
 				}
 			}
-			rmIterator.close();
 			free(nullIndicator);
 		}
+		rmIterator.close();
 	}
 
 	return 0;
@@ -1107,12 +1107,127 @@ RC RelationManager::createIndex(const string &tableName, const string &attribute
 		if( !isFileExist(indexFName) )
 			idxManagerPtr->createFile(indexFName);
 
+		// insert every record to index
+		RM_ScanIterator rmIterator;
+		vector<string> mapAttrsName;
+		mapAttrsName.push_back(indexAttr.name);
+		if( scan( tableName, indexAttr.name, NO_OP, NULL, mapAttrsName, rmIterator) == 0 )
+		{
+			RID iterRid;
+			void *iterData = malloc(PAGE_SIZE);
+			while( rmIterator.getNextTuple(iterRid, iterData) !=RM_EOF )
+			{
+				insertRecordIndex( iterRid, iterData, attrs, attrPosition, indexFName );
+			}
+
+			free(iterData);
+		}
+
 		success = 0;
 	}
 
 	// free memory
 	free(data);
 	return success;
+}
+
+RC RelationManager::insertRecordIndex(const RID &rid, const void *data, const vector<Attribute> recordDescriptor, int attrPosition, const string indexFName)
+{
+	// sort first
+	int totalColSize = recordDescriptor.size();
+	int nullBytes = getActualBytesForNullsIndicator( totalColSize );
+	unsigned char* nullIndicator = (unsigned char*) malloc(nullBytes);
+	memcpy( nullIndicator, (char*)data, nullBytes );
+
+	unsigned offset = nullBytes;
+
+	IndexManager *indexManagerPtr = IndexManager::instance();
+
+	for(int i=0; i< totalColSize;i++)
+	{
+		Attribute tmpAttr = recordDescriptor[i];
+		// check is null
+		int shiftedBit = 8*nullBytes - i - 1;
+		int nullIndex = nullBytes - (int)(shiftedBit/8) - 1;
+		bool isNull = nullIndicator[nullIndex] & (1 << (shiftedBit%8) );
+
+		if( !isNull )
+		{
+			bool isIndex = false;
+			if(attrPosition == tmpAttr.position)
+			{
+				isIndex = true;
+			}
+
+			if( tmpAttr.type == TypeVarChar )
+			{
+				int charLen;
+				memcpy( &charLen, (char*)data+offset, sizeof(int) );
+				int varcharLen = charLen + sizeof(int);
+				// should insert index
+				if(isIndex)
+				{
+					void *idxData = malloc(varcharLen);
+
+					memcpy( idxData, (char*)data+offset, varcharLen );
+
+					IXFileHandle ixfileHandle;
+					// index file not existed
+					if( indexManagerPtr->openFile(indexFName, ixfileHandle) != 0 )
+					{
+						free(idxData);
+						free(nullIndicator);
+						return -1;
+					}
+
+					if( indexManagerPtr->insertEntry( ixfileHandle, tmpAttr, idxData, rid ) != 0 )
+					{
+						free(idxData);
+						free(nullIndicator);
+						return -1;
+					}
+
+					// free/close
+					indexManagerPtr->closeFile(ixfileHandle);
+					free(idxData);
+				}
+				offset += varcharLen;
+			}
+			else
+			{
+				if(isIndex)
+				{
+					void *idxData = malloc(getFixedIndexSize());
+					memcpy( idxData, (char*)data+offset, getFixedIndexSize() );
+
+					IXFileHandle ixfileHandle;
+
+					// index file not existed
+					if( indexManagerPtr->openFile(indexFName, ixfileHandle) != 0 )
+					{
+						free(idxData);
+						free(nullIndicator);
+						return -1;
+					}
+
+					if( indexManagerPtr->insertEntry( ixfileHandle, tmpAttr, idxData, rid ) != 0 )
+					{
+						free(idxData);
+						free(nullIndicator);
+						return -1;
+					}
+
+					// free/close
+					indexManagerPtr->closeFile(ixfileHandle);
+					free(idxData);
+				}
+				offset += getFixedIndexSize();
+			}
+		}
+	}
+	free(nullIndicator);
+
+	return 0;
 }
 
 RC RelationManager::destroyIndex(const string &tableName, const string &attributeName)

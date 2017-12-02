@@ -12,7 +12,7 @@ RC testCase_2() {
 	// Create an Index
 	// Load Data
 	// Create an Index
-	
+
 	RC rc = success;
 	cerr << endl << "***** In QE Test Case 2 *****" << endl;
 
@@ -33,6 +33,12 @@ RC testCase_2() {
 		cerr << "***** createIndexforRightC() failed.  *****" << endl;
 		return rc;
 	}
+
+	// print index table
+	string INDEX_TABLE = "indexTable";
+	RelationManager *rm = RelationManager::instance();
+	cout<<"print index table"<<endl;
+	rm->printTable(INDEX_TABLE);
 
 	return rc;
 }
