@@ -452,7 +452,7 @@ void BNLJoin::getAttributes(vector<Attribute> &attrs) const{
 }
 
 RC BNLJoin::loadLeftMap(){
-	RC success = -1;
+	RC success = 0;
 
 	// init _leftMap
 	_freeSize = _numPages*PAGE_SIZE;
@@ -464,13 +464,16 @@ RC BNLJoin::loadLeftMap(){
 
 	int attrPosition = getAttributePosition(_leftAttributes, _condition.lhsAttr);
 	Attribute attr = _leftAttributes[attrPosition];
+	int nullBytes = getActualBytesForNullsIndicator(_leftAttributes.size());
 
 	void *columnData = malloc(PAGE_SIZE);
-	while( _leftIn->getNextTuple(data) )
+
+	while( _leftIn->getNextTuple(data) != QE_EOF )
 	{
+		success = 0;
 		recordSize = getRecordSize(data, _leftAttributes);
 		mapValue.size = recordSize;
-		mapValue.data = data;
+		mapValue.data = string( (char*)data, recordSize+nullBytes );
 
 		int joinColumnSize = getColumnData(data, columnData, _leftAttributes, attrPosition);
 
@@ -549,6 +552,9 @@ RC BNLJoin::loadLeftMap(){
 }
 
 void BNLJoin::createJoinRecord(void *data, JoinMapValue leftValue, const void *rightData){
+	// prepare left data
+	const char *leftData  = leftValue.data.c_str();
+
 	int leftAttributeSize = _leftAttributes.size();
 	int rightAttributeSize = _rightAttributes.size();
 	int leftNullBytes = getActualBytesForNullsIndicator( leftAttributeSize );
@@ -564,7 +570,7 @@ void BNLJoin::createJoinRecord(void *data, JoinMapValue leftValue, const void *r
 	int base10NullBytes[nullBytes];
 	memset( base10NullBytes, 0, sizeof(int)*nullBytes );
 
-	memcpy( leftNullIndicator, leftValue.data, leftNullBytes );
+	memcpy( leftNullIndicator, leftData, leftNullBytes );
 	memcpy( rightNullIndicator, rightData, rightNullBytes );
 
 	int joinIdx = 0;
@@ -616,12 +622,11 @@ void BNLJoin::createJoinRecord(void *data, JoinMapValue leftValue, const void *r
 	int offset = nullBytes;
 	// be careful the left data should offset leftNullBytes
 	// copy left
-	memcpy( (char*)data+offset, (char*)leftValue.data+leftNullBytes, leftValue.size );
+	memcpy( (char*)data+offset, (char*)leftData+leftNullBytes, leftValue.size );
 	offset += leftValue.size;
 	// copy right
 	int rightRecordSize = getRecordSize(rightData, _rightAttributes);
 	memcpy( (char*)data+offset, (char*)rightData+rightNullBytes, rightRecordSize );
-
 }
 
 

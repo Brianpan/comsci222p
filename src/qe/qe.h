@@ -25,8 +25,8 @@ struct Value {
 };
 
 struct JoinMapValue{
-    void    *data;
-    int     size;
+    string    data;
+    int        size;
 };
 
 struct Condition {

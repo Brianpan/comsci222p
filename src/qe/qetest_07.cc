@@ -37,7 +37,7 @@ RC testCase_7() {
 	// Go over the data through iterator
 	void *data = malloc(bufSize);
 	bool nullBit = false;
-	
+
 	while (bnlJoin->getNextTuple(data) != QE_EOF) {
 		int offset = 0;
 
