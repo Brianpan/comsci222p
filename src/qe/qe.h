@@ -217,12 +217,18 @@ class Project : public Iterator {
     // Projection operator
     public:
         Project(Iterator *input,                    // Iterator of input R
-              const vector<string> &attrNames){};   // vector containing attribute names
-        ~Project(){};
+              const vector<string> &attrNames);   // vector containing attribute names
+        ~Project();
 
-        RC getNextTuple(void *data) {return QE_EOF;};
+        RC getNextTuple(void *data);
         // For attribute in vector<Attribute>, name it as rel.attr
-        void getAttributes(vector<Attribute> &attrs) const{};
+        void getAttributes(vector<Attribute> &attrs) const;
+    private:
+        Iterator *_inputIterator;
+        vector<Attribute> _attributes;
+        vector<Attribute> _projectAttributes;
+
+        void prepareData( void *data, void *tmpData);
 };
 
 class BNLJoin : public Iterator {
@@ -300,5 +306,5 @@ class Aggregate : public Iterator {
 
 // accessory functions
 int getAttributePosition(const vector<Attribute> attrs, const string attrName);
-bool getColumnData(const void *data, void *columnData, const vector<Attribute> attrs, int attrPosition );
+int getColumnData(const void *data, void *columnData, const vector<Attribute> attrs, int attrPosition );
 #endif

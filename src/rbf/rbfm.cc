@@ -1356,7 +1356,7 @@ RC RBFM_ScanIterator::prepareRecord(void *fetchedData, void *data){
 		if( isNull )
 		{
 			int mod = i/8;
-			base10NullBytes[mod] += pow( 2, shiftBit );
+			base10NullBytes[mod] += pow( 2, (i%8) );
 		}
 		else
 		{

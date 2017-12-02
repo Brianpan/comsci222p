@@ -1,7 +1,7 @@
 
 #include "qe.h"
 
-// input
+// start filter
 Filter::Filter(Iterator* input, const Condition &condition) {
 	_inputIterator = input;
 	_condition = condition;
@@ -25,13 +25,29 @@ RC Filter::getNextTuple(void *data){
 	{
 		// fetch attr from
 
-		bool notNull = getColumnData(data, columnData, _attributes, _attrPosition);
+		int notNull = getColumnData(data, columnData, _attributes, _attrPosition);
 
 		// NO_OP and NULL can return
 		if( _condition.op == NO_OP )
 		{
 			success = 0;
 			break;
+		}
+		else
+		{
+			if(notNull == -1)
+			{
+				if( _condition.op ==  EQ_OP )
+				{
+					if(_condition.rhsValue.data == NULL)
+					{
+						success = 0;
+						break;
+					}
+
+				}
+				continue;
+			}
 		}
 
 		// fetch data first
@@ -178,6 +194,96 @@ void Filter::getAttributes(vector<Attribute> &attrs) const{
 	_inputIterator->getAttributes(attrs);
 }
 
+// start project
+Project::Project(Iterator *input, const vector<string> &attrNames){
+	_inputIterator = input;
+	input->getAttributes(_attributes);
+	// filter and put in projectAttr
+	Attribute tmpAttr;
+	for(int i=0;i<_attributes.size();i++)
+	{
+		tmpAttr = _attributes[i];
+		if( find( attrNames.begin(), attrNames.end(), tmpAttr.name) != attrNames.end() )
+		{
+			_projectAttributes.push_back(tmpAttr);
+		}
+	}
+	// necessary for sorting
+	sort( _projectAttributes.begin(), _projectAttributes.end(), sortAttr) ;
+}
+
+RC Project::getNextTuple(void *data){
+	RC success = -1;
+	void *tmpData = malloc(PAGE_SIZE);
+
+	if( _inputIterator->getNextTuple(tmpData) != QE_EOF )
+	{
+		prepareData(data, tmpData);
+		success = 0;
+	}
+
+	free(tmpData);
+	return success;
+}
+
+void Project::prepareData( void *data, void *tmpData){
+	int nullBytes = getActualBytesForNullsIndicator(_attributes.size());
+	int offset = nullBytes;
+	unsigned char *nullIndicator = (unsigned char*) malloc(nullBytes);
+	memcpy( nullIndicator, tmpData, nullBytes );
+
+	// for project null bytes
+	int selectNullBytes = getActualBytesForNullsIndicator(_projectAttributes.size());
+	unsigned char* selectNullIndicator = (unsigned char*) malloc(selectNullBytes);
+	int base10NullBytes[selectNullBytes];
+	memset( base10NullBytes, 0, sizeof(int)*selectNullBytes );
+	int selectOffset = selectNullBytes;
+
+	Attribute tmpAttr;
+	for(int i=0; i<_attributes.size();i++)
+	{
+		tmpAttr = _attributes[i];
+		int attrPosition = getAttributePosition(_projectAttributes, tmpAttr.name);
+		if(attrPosition < 0)
+		{
+			continue;
+		}
+		// check null
+		int shiftedBit = 8*nullBytes - i - 1;
+		int nullIndex = nullBytes - (int)(shiftedBit/8) - 1;
+		bool isNull = nullIndicator[nullIndex] & ( 1<<(shiftedBit%8) );
+
+		if(isNull)
+		{
+			int mod = attrPosition/8;
+			base10NullBytes[mod] += pow(2, (attrPosition%8));
+			continue;
+		}
+		// copy data
+		int selectedColumnSize = getColumnData( tmpData, ((char*)data+selectOffset), _attributes, i);
+
+		selectOffset += selectedColumnSize;
+	}
+
+	// copy null bytes
+	for(int i=0; i<selectNullBytes;i++)
+	{
+		selectNullIndicator[i] = base10NullBytes[i];
+	}
+
+	memcpy( data, selectNullIndicator, selectNullBytes );
+
+	free(nullIndicator);
+	free(selectNullIndicator);
+}
+
+void Project::getAttributes(vector<Attribute> &attrs) const{
+	attrs = _projectAttributes;
+}
+
+Project::~Project(){
+	_inputIterator = NULL;
+}
 
 // accessory function
 int getAttributePosition(const vector<Attribute> attrs, const string attrName)
@@ -195,7 +301,7 @@ int getAttributePosition(const vector<Attribute> attrs, const string attrName)
 	return idx;
 }
 
-bool getColumnData( const void *data, void *columnData, const vector<Attribute> attrs, int attrPosition )
+int getColumnData( const void *data, void *columnData, const vector<Attribute> attrs, int attrPosition )
 {
 	int totalColSize = attrs.size();
 	int nullBytes = getActualBytesForNullsIndicator( totalColSize );
@@ -205,9 +311,11 @@ bool getColumnData( const void *data, void *columnData, const vector<Attribute> 
 	int shiftedBit = 8*nullBytes - attrPosition - 1;
 	int nullIndex = nullBytes - (int)(shiftedBit/8) - 1;
 	bool isNull = nullIndicator[nullIndex] & (1 << (shiftedBit%8) );
+
+	int columnSize = -1;
 	if(isNull)
 	{
-		return false;
+		return columnSize;
 	}
 
 	unsigned offset = nullBytes;
@@ -236,6 +344,7 @@ bool getColumnData( const void *data, void *columnData, const vector<Attribute> 
 				if(isDestCol)
 				{
 					memcpy( columnData, (char*)data+offset, charTotalSize );
+					columnSize = charTotalSize;
 					break;
 				}
 				offset += charTotalSize;
@@ -245,6 +354,7 @@ bool getColumnData( const void *data, void *columnData, const vector<Attribute> 
 				if(isDestCol)
 				{
 					memcpy( columnData, (char*)data+offset, 4 );
+					columnSize = 4;
 					break;
 				}
 				offset += 4;
@@ -253,5 +363,5 @@ bool getColumnData( const void *data, void *columnData, const vector<Attribute> 
 	}
 
 	free(nullIndicator);
-	return true;
+	return columnSize;
 }
