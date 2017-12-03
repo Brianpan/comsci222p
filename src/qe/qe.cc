@@ -690,12 +690,14 @@ INLJoin::INLJoin(Iterator *leftIn, IndexScan *rightIn,
 	_attributes.insert( _attributes.end(), _rightAttributes.begin(), _rightAttributes.end() );
 	_getLeftRecord = true;
 	_leftNullBytes = getActualBytesForNullsIndicator(_leftAttributes.size());
+	_columnData = malloc(PAGE_SIZE);
 
 }
 
 INLJoin::~INLJoin() {
 	_leftIn = NULL;
 	_rightIn = NULL;
+	free(_columnData);
 }
 
 RC INLJoin::getNextTuple(void *data) {
@@ -711,14 +713,14 @@ RC INLJoin::getNextTuple(void *data) {
 				return success;
 			}
 			// get scan val
-			void *columnData = malloc(PAGE_SIZE);
-			memset(columnData, 0, PAGE_SIZE);
-			int columnSize = getColumnData(tmpData, columnData, _leftAttributes, _leftPosition);
+
+			memset(_columnData, 0, PAGE_SIZE);
+			int columnSize = getColumnData(tmpData, _columnData, _leftAttributes, _leftPosition);
 			// column data should add column size back
 			if(columnSize > 0 && _leftAttributes[_leftPosition].type == TypeVarChar)
 			{
-				memmove( (char*)columnData+sizeof(int), columnData, columnSize );
-				memcpy( &columnSize, columnData, sizeof(int) );
+				memmove( (char*)_columnData+sizeof(int), _columnData, columnSize );
+				memcpy( &columnSize, _columnData, sizeof(int) );
 			}
 
 			_leftRecord.size = getRecordSize(tmpData, _leftAttributes);
@@ -735,7 +737,7 @@ RC INLJoin::getNextTuple(void *data) {
 					}
 					else
 					{
-						_rightIn->setIterator(columnData, columnData, true, true);
+						_rightIn->setIterator(_columnData, _columnData, true, true);
 					}
 					break;
 				case LT_OP:      // <
@@ -751,7 +753,6 @@ RC INLJoin::getNextTuple(void *data) {
 			}
 
 			free(tmpData);
-			free(columnData);
 		}
 
 		_getLeftRecord = false;

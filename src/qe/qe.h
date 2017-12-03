@@ -303,6 +303,7 @@ class INLJoin : public Iterator {
             vector<Attribute> _rightAttributes;
 
             int _leftNullBytes;
+            void *_columnData;
 
             int getRecordSize(const void *data, const vector<Attribute> attrs);
             void createJoinRecord(void *data, JoinMapValue leftValue, const void *rightData);

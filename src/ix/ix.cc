@@ -110,6 +110,7 @@ RC IndexManager::insertEntry(IXFileHandle &ixfileHandle, const Attribute &attrib
                 return -1;
             }
         }
+        cout<<*(float*)key<<endl;
         return insertFixedLengthEntry<float>( ixfileHandle, key, rid );
     }
     else if( idxAttrType == TypeInt)

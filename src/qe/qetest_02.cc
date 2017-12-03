@@ -28,6 +28,7 @@ RC testCase_2() {
 		return rc;
 	}
 
+	cout<<"create Right C index"<<endl;
 	rc = createIndexforRightC();
 	if (rc != success) {
 		cerr << "***** createIndexforRightC() failed.  *****" << endl;

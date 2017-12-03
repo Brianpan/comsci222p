@@ -31,6 +31,7 @@ int testCase_1() {
 	}
 
 	// Create an index after inserting tuples - should reflect the currently existing tuples.
+	cout<<"create Left C index"<<endl;
 	rc = createIndexforLeftC();
 	if (rc != success) {
 		cerr << "***** createIndexforLeftC() failed.  *****" << endl;
