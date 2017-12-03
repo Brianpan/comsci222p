@@ -353,7 +353,7 @@ class Aggregate : public Iterator {
         Aggregate(Iterator *input,          // Iterator of input R
                   Attribute aggAttr,        // The attribute over which we are computing an aggregate
                   AggregateOp op            // Aggregate operation
-        ){};
+        );
 
         // Optional for everyone: 5 extra-credit points
         // Group-based hash aggregation
@@ -362,13 +362,22 @@ class Aggregate : public Iterator {
                   Attribute groupAttr,         // The attribute over which we are grouping the tuples
                   AggregateOp op              // Aggregate operation
         ){};
-        ~Aggregate(){};
+        ~Aggregate();
 
-        RC getNextTuple(void *data){return QE_EOF;};
+        RC getNextTuple(void *data);
         // Please name the output attribute as aggregateOp(aggAttr)
         // E.g. Relation=rel, attribute=attr, aggregateOp=MAX
         // output attrname = "MAX(rel.attr)"
-        void getAttributes(vector<Attribute> &attrs) const{};
+        void getAttributes(vector<Attribute> &attrs) const;
+
+    private:
+        AggregateOp _op;
+        Iterator *_inputIterator;
+        Attribute _aggAttr;
+        vector<Attribute> _attributes;
+        vector<Attribute> _inputAttributes;
+
+        RC calculateAggregate(void *data);
 };
 
 // accessory functions

@@ -6,7 +6,7 @@ Filter::Filter(Iterator* input, const Condition &condition) {
 	_inputIterator = input;
 	_condition = condition;
 
-	getAttributes(_attributes);
+	_inputIterator->getAttributes(_attributes);
 
 	_attrPosition = getAttributePosition(_attributes, _condition.lhsAttr);
 	_filterAttribute = _attributes[_attrPosition];
@@ -191,7 +191,7 @@ RC Filter::getNextTuple(void *data){
 }
 
 void Filter::getAttributes(vector<Attribute> &attrs) const{
-	_inputIterator->getAttributes(attrs);
+	attrs = _attributes;
 }
 
 // start project
@@ -990,7 +990,215 @@ void INLJoin::setCondition(CompOp op, void **lowKey, void **highKey,
 	}
 }
 
+// Aggregate
+Aggregate::Aggregate(Iterator *input,          // Iterator of input R
+                  Attribute aggAttr,        // The attribute over which we are computing an aggregate
+                  AggregateOp op            // Aggregate operation
+        ){
 
+	_inputIterator = input;
+	_aggAttr = aggAttr;
+	_op = op;
+	aggAttr.position = 1;
+	// generate attributes
+	_inputIterator->getAttributes(_inputAttributes);
+
+	Attribute aggData;
+	aggData.position = 2;
+	aggData.length = 4;
+	switch(_op){
+		case MIN:
+			if(aggAttr.type == TypeInt)
+			{
+				aggData.type = TypeInt;
+			}
+			else
+			{
+				aggData.type = TypeReal;
+			}
+			aggData.name = "MIN("+aggAttr.name+")";
+			break;
+		case MAX:
+			if(aggAttr.type == TypeInt)
+			{
+				aggData.type = TypeInt;
+			}
+			else
+			{
+				aggData.type = TypeReal;
+			}
+			aggData.name = "MAX("+aggAttr.name+")";
+			break;
+		case COUNT:
+			aggData.type = TypeInt;
+			aggData.name = "COUNT("+aggAttr.name+")";
+			break;
+		case SUM:
+			if(aggAttr.type == TypeInt)
+			{
+				aggData.type = TypeInt;
+			}
+			else
+			{
+				aggData.type = TypeReal;
+			}
+			aggData.name = "SUM("+aggAttr.name+")";
+			break;
+		case AVG:
+			aggData.type = TypeReal;
+			aggData.name = "AVG("+aggAttr.name+")";
+			break;
+	}
+
+	_attributes.push_back(aggData);
+}
+
+Aggregate::~Aggregate(){
+	_inputIterator = NULL;
+}
+
+RC Aggregate::getNextTuple(void *data){
+	RC success = -1;
+
+	success = calculateAggregate(data);
+	return success;
+}
+
+RC Aggregate::calculateAggregate(void *data){
+	RC success = -1;
+
+	void *tmpData = malloc(PAGE_SIZE);
+	void *columnData = malloc(PAGE_SIZE);
+	int attrPosition = getAttributePosition(_inputAttributes, _aggAttr.name);
+
+	float aggrValue = 0;
+	float aggrCount = 0;
+	while( _inputIterator->getNextTuple(tmpData) != QE_EOF )
+	{
+		int columnSize = getColumnData(tmpData, columnData, _inputAttributes, attrPosition);
+		// start aggregate
+		switch(_op){
+			case MIN:
+				if(_aggAttr.type == TypeInt)
+				{
+					if(success == -1)
+					{
+						aggrValue = *((int*)columnData);
+					}
+					else
+					{
+						int curValue = *((int*)columnData);
+						if( curValue < aggrValue )
+						{
+							aggrValue = curValue;
+						}
+					}
+				}
+				else
+				{
+					if(success == -1)
+					{
+						aggrValue = *((float*)columnData);
+					}
+					else
+					{
+						float curValue = *((float*)columnData);
+						if( curValue < aggrValue )
+						{
+							aggrValue = curValue;
+						}
+					}
+				}
+				break;
+			case MAX:
+				if(_aggAttr.type == TypeInt)
+				{
+					if(success == -1)
+					{
+						aggrValue = *((int*)columnData);
+					}
+					else
+					{
+						int curValue = *((int*)columnData);
+						if( curValue > aggrValue )
+						{
+							aggrValue = curValue;
+						}
+					}
+				}
+				else
+				{
+					if(success == -1)
+					{
+						aggrValue = *((float*)columnData);
+					}
+					else
+					{
+						float curValue = *((float*)columnData);
+						if( curValue > aggrValue )
+						{
+							aggrValue = curValue;
+						}
+					}
+				}
+				break;
+			case COUNT:
+				aggrCount += 1;
+				break;
+			case SUM:
+				if(_aggAttr.type == TypeInt)
+				{
+					aggrValue += *((int*)columnData);
+				}
+				else
+				{
+					aggrValue += *((float*)columnData);
+				}
+				break;
+			case AVG:
+				if(_aggAttr.type == TypeInt)
+				{
+					aggrValue += *((int*)columnData);
+				}
+				else
+				{
+					aggrValue += *((float*)columnData);
+				}
+				aggrCount += 1;
+				break;
+		}
+
+		success = 0;
+
+	}
+
+	// prepare data
+	if(success == 0)
+	{
+		memset(data, 0, 1);
+		if(_op == AVG)
+		{
+			float aggrAvg = ((float)aggrValue)/aggrCount;
+				memcpy( (char*)data+1, &aggrAvg, 4);
+		}
+		else if(_op == COUNT)
+		{
+			memcpy( (char*)data+1, &aggrCount, 4);
+		}
+		else
+		{
+			memcpy( (char*)data+1, &aggrValue, 4);
+		}
+	}
+
+	free(tmpData);
+	free(columnData);
+	return success;
+}
+
+void Aggregate::getAttributes(vector<Attribute> &attrs) const{
+	attrs = _attributes;
+}
 // accessory function
 int getAttributePosition(const vector<Attribute> attrs, const string attrName)
 {
@@ -1072,6 +1280,8 @@ int getColumnData( const void *data, void *columnData, const vector<Attribute> a
 	return columnSize;
 }
 
+
+/////
 void readField(const void *input, void *data, vector<Attribute> attrs,
 		int attrPos, AttrType type) {
 

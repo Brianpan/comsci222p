@@ -20,7 +20,16 @@ RC privateTestCase_9() {
 	RC rc = success;
 
 	int compVal = 1000;
-	
+	// attrs
+	// print index table
+	string INDEX_TABLE = "Tables";
+	RelationManager *rm = RelationManager::instance();
+	cout<<"print index table"<<endl;
+	rm->printTable(INDEX_TABLE);
+
+//	vector<Attribute> attrs;
+//    rm->getAttributes("largeleft", attrs);
+
     // Create IndexScan
     TableScan *input = new TableScan(*rm, "largeleft");
 
@@ -47,10 +56,10 @@ RC privateTestCase_9() {
 
 	int count = 0;
     void *data = malloc(bufSize);
-    
+
     // An aggregation returns a float value
     float minVal = 0.0;
-	
+
     while(agg->getNextTuple(data) != QE_EOF)
     {
     	minVal = *(float *) ((char *) data + 1);
@@ -79,7 +88,7 @@ RC privateTestCase_9() {
 
 
 int main() {
-	
+
 	if (privateTestCase_9() != success) {
 		cerr << "***** [FAIL] QE Test Case 9 failed. *****" << endl;
 		return fail;
