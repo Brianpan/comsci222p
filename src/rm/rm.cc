@@ -1110,7 +1110,13 @@ RC RelationManager::createIndex(const string &tableName, const string &attribute
 		// insert every record to index
 		RM_ScanIterator rmIterator;
 		vector<string> mapAttrsName;
-		mapAttrsName.push_back(indexAttr.name);
+		vector<Attribute> tableAttrs;
+		getAttributes(tableName, tableAttrs);
+		for(int i=0;i<tableAttrs.size();i++)
+		{
+			mapAttrsName.push_back(tableAttrs[i].name);
+		}
+
 		if( scan( tableName, indexAttr.name, NO_OP, NULL, mapAttrsName, rmIterator) == 0 )
 		{
 			RID iterRid;

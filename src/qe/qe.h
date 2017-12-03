@@ -277,17 +277,10 @@ class INLJoin : public Iterator {
     // Index nested-loop join operator
     public:
 
-        /*
         INLJoin(Iterator *leftIn,           // Iterator of input R
-               IndexScan *rightIn,          // IndexScan Iterator of input S
-               const Condition &condition   // Join condition
+            IndexScan *rightIn,          // IndexScan Iterator of input S
+            const Condition &condition   // Join condition
         );
-        */
-        INLJoin(Iterator *leftIn,                               // Iterator of input R
-            IndexScan *rightIn,                             // IndexScan Iterator of input S
-            const Condition &condition );                    // Join condition
-            //const unsigned numPages                         // Number of pages can be used to do join (decided by the optimizer)
-        //);
 
         ~INLJoin();
 
@@ -296,33 +289,20 @@ class INLJoin : public Iterator {
         void getAttributes(vector<Attribute> &attrs) const;   //{};
 
     private:
-            Iterator *_leftItr;
-            IndexScan *_rightItr;
+            Iterator *_leftIn;
+            IndexScan *_rightIn;
 
-            void *_leftValue;
+            Condition _condition;
 
-            //void *_rightValue;  //
-
-            vector<JoinMapValue> _curLeftValues;
-
-            void *_leftTuple;
-            void *_rightTuple;
-
-            CompOp _op;
-            AttrType _type;
-            unsigned _leftAttrPos;
-
-            //unsigned _rightAttrPos;  //
+            int _leftPosition;
+            JoinMapValue _leftRecord;
+            bool _getLeftRecord;
 
             vector<Attribute> _attributes;
             vector<Attribute> _leftAttributes;
             vector<Attribute> _rightAttributes;
 
-            RC _isEnd;
-            bool _leftHalf; // for NE_OP;
-
-            void setCondition(CompOp op, void **lowKey, void **highKey,
-                bool &lowKeyInclusive, bool &highKeyInclusive);
+            int _leftNullBytes;
 
             int getRecordSize(const void *data, const vector<Attribute> attrs);
             void createJoinRecord(void *data, JoinMapValue leftValue, const void *rightData);

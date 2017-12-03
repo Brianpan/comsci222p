@@ -677,129 +677,96 @@ int BNLJoin::getRecordSize(const void *data, const vector<Attribute> attrs){
 //INLJoin
 INLJoin::INLJoin(Iterator *leftIn, IndexScan *rightIn,
 		const Condition &condition)
-	:_leftItr(leftIn), _rightItr(rightIn)
 {
-	_attributes.clear();
-	_leftAttributes.clear();
-	_rightAttributes.clear();
-
 	leftIn->getAttributes(_leftAttributes);
 	rightIn->getAttributes(_rightAttributes);
 
+	_leftIn = leftIn;
+	_rightIn = rightIn;
+	_condition = condition;
+	_leftPosition = getAttributePosition( _leftAttributes, condition.lhsAttr );
 
-	for (unsigned i = 0; i < _leftAttributes.size(); i++) {
-		_attributes.push_back(_leftAttributes[i]);
+	_attributes = _leftAttributes;
+	_attributes.insert( _attributes.end(), _rightAttributes.begin(), _rightAttributes.end() );
+	_getLeftRecord = true;
+	_leftNullBytes = getActualBytesForNullsIndicator(_leftAttributes.size());
 
-		if (_leftAttributes[i].name.compare(condition.lhsAttr) == 0) {
-			_leftAttrPos = i;
-			_type = _leftAttributes[i].type;
-			_leftValue = malloc(_leftAttributes[i].length + sizeof(int) );
-		}
-	}
-
-	_op = condition.op;
-
-	_leftTuple = malloc(PAGE_SIZE);
-	_rightTuple = malloc(PAGE_SIZE);
-
-	_leftHalf = false;
-
-	_isEnd = _leftItr->getNextTuple(_leftTuple);
-
-	if (_isEnd != QE_EOF) {
-		readField(_leftTuple, _leftValue, _leftAttributes, _leftAttrPos, _type);
-
-		void *lowKey = NULL;
-		void *highKey = NULL;
-		bool lowKeyInclusive = false;
-		bool highKeyInclusive = false;
-
-		setCondition(_op, &lowKey, &highKey, lowKeyInclusive, highKeyInclusive);
-		_rightItr->setIterator(lowKey, highKey, lowKeyInclusive,
-				highKeyInclusive);
-
-		_leftHalf = true;
-	}
 }
 
 INLJoin::~INLJoin() {
-	free(_leftValue);
-	free(_leftTuple);
-	free(_rightTuple);
+	_leftIn = NULL;
+	_rightIn = NULL;
 }
 
 RC INLJoin::getNextTuple(void *data) {
-
-	if (_isEnd == QE_EOF)
-		return _isEnd;
-
 	RC success = -1;
+	while(true)
+	{
+		if( _getLeftRecord )
+		{
+			void *tmpData = malloc(PAGE_SIZE);
+			if( _leftIn->getNextTuple(tmpData) == QE_EOF )
+			{
+				free(tmpData);
+				return success;
+			}
+			// get scan val
+			void *columnData = malloc(PAGE_SIZE);
+			memset(columnData, 0, PAGE_SIZE);
+			int columnSize = getColumnData(tmpData, columnData, _leftAttributes, _leftPosition);
+			// column data should add column size back
+			if(columnSize > 0 && _leftAttributes[_leftPosition].type == TypeVarChar)
+			{
+				memmove( (char*)columnData+sizeof(int), columnData, columnSize );
+				memcpy( &columnSize, columnData, sizeof(int) );
+			}
 
-	do {
-		success = _rightItr->getNextTuple(_rightTuple);
+			_leftRecord.size = getRecordSize(tmpData, _leftAttributes);
+			_leftRecord.data = string( (char*)tmpData, (_leftRecord.size+_leftNullBytes) );
 
-		if (success != QE_EOF && _leftHalf && _op == NE_OP) {
-			void *lowKey = NULL;
-			void *highKey = NULL;
-			bool lowKeyInclusive = false;
-			bool highKeyInclusive = false;
+			// set iter
+			switch(_condition.op)
+			{
+				case EQ_OP:
+					// NULL case
+					if(columnSize == -1)
+					{
+						_rightIn->setIterator(NULL, NULL, true, true);
+					}
+					else
+					{
+						_rightIn->setIterator(columnData, columnData, true, true);
+					}
+					break;
+				case LT_OP:      // <
+					break;
+	           	case LE_OP:      // <=
+	           		break;
+	           	case GT_OP:      // >
+	           		break;
+	           	case GE_OP:      // >=
+	           		break;
+	           	case NE_OP:      // !=
+	           		break;
+			}
 
-			setCondition(_op, &lowKey, &highKey, lowKeyInclusive,
-					highKeyInclusive);
-			_rightItr->setIterator(lowKey, highKey, lowKeyInclusive,
-					highKeyInclusive);
-
-			_leftHalf = false;
+			free(tmpData);
+			free(columnData);
 		}
 
-		else if (success != QE_EOF) {
-			_isEnd = _leftItr->getNextTuple(_leftTuple);
-
-			if (_isEnd == QE_EOF)
-				return _isEnd;
-
-			readField(_leftTuple, _leftValue, _leftAttributes, _leftAttrPos, _type);
-
-			void *lowKey = NULL;
-			void *highKey = NULL;
-			bool lowKeyInclusive = false;
-			bool highKeyInclusive = false;
-
-			setCondition(_op, &lowKey, &highKey, lowKeyInclusive,
-					highKeyInclusive);
-			_rightItr->setIterator(lowKey, highKey, lowKeyInclusive,
-					highKeyInclusive);
-
-			_leftHalf = true;
+		_getLeftRecord = false;
+		void *rightData = malloc(PAGE_SIZE);
+		if( _rightIn->getNextTuple(rightData) != QE_EOF )
+		{
+			success = 0;
+			createJoinRecord( data, _leftRecord, rightData );
+			free(rightData);
+			return success;
 		}
-
-	} while (success != QE_EOF);
-
-	//int leftTupleLength = getTupleLength(_leftTuple, _leftAttrs, _leftAttrPos);
-	//int rightTupleLength = getTupleLength(_rightTuple, _rightAttrs, _rightAttrPos);
-
-	//int combinedSize = leftAttributeSize + rightAttributeSize;
-	int nullBytes = getActualBytesForNullsIndicator(_leftAttributes.size());
-
-	//int attrPosition = getAttributePosition(_leftAttributes, _condition.lhsAttr);
-	//Attribute attr = _leftAttributes[attrPosition];
-	//int nullBytes = getActualBytesForNullsIndicator(_leftAttributes.size());
-
-	int recordSize;
-
-	JoinMapValue mapValue;
-	recordSize = getRecordSize(data, _leftAttributes);
-	mapValue.size = recordSize;
-	mapValue.data = string( (char*)_leftTuple, recordSize+nullBytes );
-
-	createJoinRecord( data, mapValue, _rightTuple );
-	//createJoinRecord(void *data, JoinMapValue leftValue, const void *rightData){
-
-	//memcpy((char*)data, _leftTuple, leftTupleLength);
-	//memcpy((char*)data + leftTupleLength, _rightTuple, rightTupleLength);
-
-	return success;
-
+		// update flag to continue
+		_getLeftRecord = true;
+		free(rightData);
+	}
 }
 
 void INLJoin::createJoinRecord(void *data, JoinMapValue leftValue, const void *rightData){
@@ -926,68 +893,7 @@ int INLJoin::getRecordSize(const void *data, const vector<Attribute> attrs){
 }
 
 void INLJoin::getAttributes(vector<Attribute> &attrs) const {
-	attrs.clear();
-	attrs = this->_attributes;
-}
-
-void INLJoin::setCondition(CompOp op, void **lowKey, void **highKey,
-		bool &lowKeyInclusive, bool &highKeyInclusive) {
-	switch (op) {
-	case EQ_OP: {
-		*lowKey = _leftValue;
-		*highKey = _leftValue;
-		lowKeyInclusive = true;
-		highKeyInclusive = true;
-		break;
-	}
-	case LT_OP: {
-		*lowKey = _leftValue;
-		*highKey = NULL;
-		lowKeyInclusive = false;
-		highKeyInclusive = false;
-		break;
-	}
-	case GT_OP: {
-		*lowKey = NULL;
-		*highKey = _leftValue;
-		lowKeyInclusive = false;
-		highKeyInclusive = false;
-		break;
-	}
-	case LE_OP: {
-		*lowKey = _leftValue;
-		*highKey = NULL;
-		lowKeyInclusive = true;
-		highKeyInclusive = false;
-		break;
-	}
-	case GE_OP: {
-		*lowKey = NULL;
-		*highKey = _leftValue;
-		lowKeyInclusive = true;
-		highKeyInclusive = false;
-		break;
-	}
-	case NO_OP: {
-		*lowKey = NULL;
-		*highKey = NULL;
-		lowKeyInclusive = false;
-		highKeyInclusive = false;
-		break;
-	}
-	case NE_OP: {
-		if (_leftHalf) {
-			*lowKey = _leftValue;
-			*highKey = NULL;
-		} else {
-			*lowKey = NULL;
-			*highKey = _leftValue;
-		}
-		lowKeyInclusive = false;
-		highKeyInclusive = false;
-		break;
-	}
-	}
+	attrs = _attributes;
 }
 
 // Aggregate
