@@ -365,10 +365,4 @@ class Aggregate : public Iterator {
 int getAttributePosition(const vector<Attribute> attrs, const string attrName);
 int getColumnData(const void *data, void *columnData, const vector<Attribute> attrs, int attrPosition );
 
-// for INLJ
-void readField(const void *input, void *data, vector<Attribute> attrs,
-        int attrPos, AttrType type);
-int getTupleLength(const void *tuple, vector<Attribute> attrs, int AttrPos);
-bool compareField(const void *attribute, const void *condition, AttrType type,
-        CompOp compOp);
 #endif
