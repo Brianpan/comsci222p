@@ -679,25 +679,22 @@ INLJoin::INLJoin(Iterator *leftIn, IndexScan *rightIn,
 		const Condition &condition)
 	:_leftItr(leftIn), _rightItr(rightIn)
 {
-	_attrs.clear();
-	_leftAttrs.clear();
-	_rightAttrs.clear();
+	_attributes.clear();
+	_leftAttributes.clear();
+	_rightAttributes.clear();
 
-	leftIn->getAttributes(_leftAttrs);
-	rightIn->getAttributes(_rightAttrs);
+	leftIn->getAttributes(_leftAttributes);
+	rightIn->getAttributes(_rightAttributes);
 
-	for (unsigned i = 0; i < _leftAttrs.size(); i++) {
-		_attrs.push_back(_leftAttrs[i]);
 
-		if (_leftAttrs[i].name.compare(condition.lhsAttr) == 0) {
+	for (unsigned i = 0; i < _leftAttributes.size(); i++) {
+		_attributes.push_back(_leftAttributes[i]);
+
+		if (_leftAttributes[i].name.compare(condition.lhsAttr) == 0) {
 			_leftAttrPos = i;
-			_type = _leftAttrs[i].type;
-			_leftValue = malloc(_leftAttrs[i].length + sizeof(int));
+			_type = _leftAttributes[i].type;
+			_leftValue = malloc(_leftAttributes[i].length + sizeof(int) );
 		}
-	}
-
-	for (unsigned i = 0; i < _rightAttrs.size(); i++) {
-		_attrs.push_back(_rightAttrs[i]);
 	}
 
 	_op = condition.op;
@@ -710,7 +707,7 @@ INLJoin::INLJoin(Iterator *leftIn, IndexScan *rightIn,
 	_isEnd = _leftItr->getNextTuple(_leftTuple);
 
 	if (_isEnd != QE_EOF) {
-		readField(_leftTuple, _leftValue, _leftAttrs, _leftAttrPos, _type);
+		readField(_leftTuple, _leftValue, _leftAttributes, _leftAttrPos, _type);
 
 		void *lowKey = NULL;
 		void *highKey = NULL;
@@ -727,21 +724,21 @@ INLJoin::INLJoin(Iterator *leftIn, IndexScan *rightIn,
 
 INLJoin::~INLJoin() {
 	free(_leftValue);
-
 	free(_leftTuple);
 	free(_rightTuple);
 }
 
 RC INLJoin::getNextTuple(void *data) {
+
 	if (_isEnd == QE_EOF)
 		return _isEnd;
 
-	RC isSuccess = 0;
+	RC success = -1;
 
 	do {
-		isSuccess = _rightItr->getNextTuple(_rightTuple);
+		success = _rightItr->getNextTuple(_rightTuple);
 
-		if (isSuccess == QE_EOF && _leftHalf && _op == NE_OP) {
+		if (success != QE_EOF && _leftHalf && _op == NE_OP) {
 			void *lowKey = NULL;
 			void *highKey = NULL;
 			bool lowKeyInclusive = false;
@@ -755,13 +752,13 @@ RC INLJoin::getNextTuple(void *data) {
 			_leftHalf = false;
 		}
 
-		else if (isSuccess == QE_EOF) {
+		else if (success != QE_EOF) {
 			_isEnd = _leftItr->getNextTuple(_leftTuple);
 
 			if (_isEnd == QE_EOF)
 				return _isEnd;
 
-			readField(_leftTuple, _leftValue, _leftAttrs, _leftAttrPos, _type);
+			readField(_leftTuple, _leftValue, _leftAttributes, _leftAttrPos, _type);
 
 			void *lowKey = NULL;
 			void *highKey = NULL;
@@ -776,21 +773,161 @@ RC INLJoin::getNextTuple(void *data) {
 			_leftHalf = true;
 		}
 
-	} while (isSuccess == QE_EOF);
+	} while (success != QE_EOF);
 
-	int leftTupleLength = getTupleLength(_leftTuple, _leftAttrs);
-	int rightTupleLength = getTupleLength(_rightTuple, _rightAttrs);
+	//int leftTupleLength = getTupleLength(_leftTuple, _leftAttrs, _leftAttrPos);
+	//int rightTupleLength = getTupleLength(_rightTuple, _rightAttrs, _rightAttrPos);
 
-	memcpy((char*)data, _leftTuple, leftTupleLength);
-	memcpy((char*)data + leftTupleLength, _rightTuple, rightTupleLength);
+	//int combinedSize = leftAttributeSize + rightAttributeSize;
+	int nullBytes = getActualBytesForNullsIndicator(_leftAttributes.size());
 
-	return isSuccess;
+	//int attrPosition = getAttributePosition(_leftAttributes, _condition.lhsAttr);
+	//Attribute attr = _leftAttributes[attrPosition];
+	//int nullBytes = getActualBytesForNullsIndicator(_leftAttributes.size());
 
+	int recordSize;
+
+	JoinMapValue mapValue;
+	recordSize = getRecordSize(data, _leftAttributes);
+	mapValue.size = recordSize;
+	mapValue.data = string( (char*)_leftTuple, recordSize+nullBytes );
+
+	createJoinRecord( data, mapValue, _rightTuple );
+	//createJoinRecord(void *data, JoinMapValue leftValue, const void *rightData){
+
+	//memcpy((char*)data, _leftTuple, leftTupleLength);
+	//memcpy((char*)data + leftTupleLength, _rightTuple, rightTupleLength);
+
+	return success;
+
+}
+
+void INLJoin::createJoinRecord(void *data, JoinMapValue leftValue, const void *rightData){
+	// prepare left data
+	const char *leftData  = leftValue.data.c_str();
+
+	int leftAttributeSize = _leftAttributes.size();
+	int rightAttributeSize = _rightAttributes.size();
+	int leftNullBytes = getActualBytesForNullsIndicator( leftAttributeSize );
+	int rightNullBytes = getActualBytesForNullsIndicator( rightAttributeSize );
+
+	int combinedSize = leftAttributeSize + rightAttributeSize;
+	int nullBytes = getActualBytesForNullsIndicator(combinedSize);
+
+	// init null bytes
+	unsigned char *leftNullIndicator = (unsigned char*) malloc(leftNullBytes);
+	unsigned char *rightNullIndicator = (unsigned char*) malloc(rightNullBytes);
+	unsigned char *nullIndicator = (unsigned char*) malloc(nullBytes);
+	int base10NullBytes[nullBytes];
+	memset( base10NullBytes, 0, sizeof(int)*nullBytes );
+
+	memcpy( leftNullIndicator, leftData, leftNullBytes );
+	memcpy( rightNullIndicator, rightData, rightNullBytes );
+
+	int joinIdx = 0;
+	for(int i=0;i<_leftAttributes.size();i++)
+	{
+		// check null
+		int shiftedBit = 8*leftNullBytes - i - 1;
+		int nullIndex = leftNullBytes - (int)(shiftedBit/8) - 1;
+		bool isNull = leftNullIndicator[nullIndex] & ( 1<<(shiftedBit%8) );
+
+		if(isNull)
+		{
+			int mod = joinIdx/8;
+			int joinShiftBit = 8*nullBytes- joinIdx - 1;
+			base10NullBytes[mod] += pow( 2, (joinShiftBit%8) );
+			continue;
+		}
+
+		joinIdx += 1;
+	}
+
+	for(int i=0;i<_rightAttributes.size();i++)
+	{
+		// check null
+		int shiftedBit = 8*rightNullBytes - i - 1;
+		int nullIndex = rightNullBytes - (int)(shiftedBit/8) - 1;
+		bool isNull = rightNullIndicator[nullIndex] & ( 1<<(shiftedBit%8) );
+
+		if(isNull)
+		{
+			int mod = joinIdx/8;
+			int joinShiftBit = 8*nullBytes- joinIdx - 1;
+			base10NullBytes[mod] += pow( 2, (joinShiftBit%8) );
+			continue;
+		}
+
+		joinIdx += 1;
+	}
+	// from int to char 8 bits
+	for(int i=0;i<nullBytes;i++)
+	{
+		nullIndicator[i] = base10NullBytes[i];
+	}
+
+	// copy null Indicator
+	memcpy( data, nullIndicator, nullBytes );
+
+	// start copy data
+	int offset = nullBytes;
+	// be careful the left data should offset leftNullBytes
+	// copy left
+	memcpy( (char*)data+offset, (char*)leftData+leftNullBytes, leftValue.size );
+	offset += leftValue.size;
+	// copy right
+	int rightRecordSize = getRecordSize(rightData, _rightAttributes);
+	memcpy( (char*)data+offset, (char*)rightData+rightNullBytes, rightRecordSize );
+}
+
+
+int INLJoin::getRecordSize(const void *data, const vector<Attribute> attrs){
+	int totalColSize = attrs.size();
+	int nullBytes = getActualBytesForNullsIndicator( totalColSize );
+	unsigned char* nullIndicator = (unsigned char*) malloc(nullBytes);
+	memcpy( nullIndicator, (char*)data, nullBytes );
+	int recordSize = 0;
+
+	int offset = nullBytes;
+
+	Attribute tmpAttr;
+	for(int attrPosition=0; attrPosition<attrs.size();attrPosition++)
+	{
+		tmpAttr = attrs[attrPosition];
+
+		// check is null or not
+		int shiftedBit = 8*nullBytes - attrPosition - 1;
+		int nullIndex = nullBytes - (int)(shiftedBit/8) - 1;
+		bool isNull = nullIndicator[nullIndex] & (1 << (shiftedBit%8) );
+
+		if(isNull)
+		{
+			continue;
+		}
+
+		if( tmpAttr.type == TypeVarChar )
+		{
+			int charLen;
+			memcpy( &charLen, (char*)data+offset, sizeof(int) );
+			int charTotalSize = sizeof(int) + charLen;
+			offset += charTotalSize;
+		}
+		else
+		{
+			offset += 4;
+		}
+	}
+
+	recordSize = offset - nullBytes;
+
+	free(nullIndicator);
+
+	return recordSize;
 }
 
 void INLJoin::getAttributes(vector<Attribute> &attrs) const {
 	attrs.clear();
-	attrs = this->_attrs;
+	attrs = this->_attributes;
 }
 
 void INLJoin::setCondition(CompOp op, void **lowKey, void **highKey,
@@ -937,33 +1074,87 @@ int getColumnData( const void *data, void *columnData, const vector<Attribute> a
 
 void readField(const void *input, void *data, vector<Attribute> attrs,
 		int attrPos, AttrType type) {
-	int offset = 0;
-	int attrLength = 0;
 
-	for (int i = 0; i < attrPos; i++) {
-		if (attrs[i].type == TypeInt)
-			offset += sizeof(int);
-		else if (attrs[i].type == TypeReal)
-			offset += sizeof(float);
-		else {
-			int stringLength = *(int *) ((char *) input + offset);
-			offset += sizeof(int) + stringLength;
+	int totalColSize = attrs.size();
+	int nullBytes = getActualBytesForNullsIndicator( totalColSize );
+	unsigned char* nullIndicator = (unsigned char*) malloc(nullBytes);
+	memcpy( nullIndicator, (char*)data, nullBytes);
+	// check is null or not
+	int shiftedBit = 8*nullBytes - attrPos - 1;
+	int nullIndex = nullBytes - (int)(shiftedBit/8) - 1;
+	bool isNull = nullIndicator[nullIndex] & (1 << (shiftedBit%8) );
+
+	unsigned offset = nullBytes;
+	bool isDestCol = false;
+
+	memcpy((char*)input, (char*)nullIndicator, nullBytes);
+
+	int attrLength=0;
+
+	for(int i=0; i<totalColSize;i++)
+	{
+		Attribute tmpAttr = attrs[i];
+		// check is null
+		shiftedBit = 8*nullBytes - i - 1;
+		nullIndex = nullBytes - (int)(shiftedBit/8) - 1;
+
+		isNull = nullIndicator[nullIndex] & (1 << (shiftedBit%8) );
+
+		if( !isNull )
+		{
+			if( i==attrPos )
+			{
+					isDestCol = true;
+			}
+			if( tmpAttr.type == TypeVarChar )
+			{
+				int charLen;
+				memcpy( &charLen, (char*)data+offset, sizeof(int) );
+				int charTotalSize = sizeof(int) + charLen;
+				attrLength+=charTotalSize;
+
+				if(isDestCol)
+				{
+					memcpy( (char*)input+offset, (char*)data+offset, charTotalSize );
+					//columnSize = charTotalSize;
+					break;
+				}
+				offset += charTotalSize;
+			}
+			else
+			{
+				if(isDestCol)
+				{
+					memcpy( (char*)input+offset, (char*)data+offset, sizeof(int));
+					attrLength+=sizeof(int);
+					break;
+				}
+				offset += sizeof(int);
+			}
 		}
 	}
 
-	if (type == TypeInt) {
-		attrLength = sizeof(int);
-	} else if (type == TypeReal) {
-		attrLength = sizeof(float);
-	} else {
-		attrLength = *(int *) ((char *) input + offset) + sizeof(int);
-	}
+	//memcpy((char*)input+nullBytes, (char*)data+nullBytes, attrLength);
 
-	memcpy(data, (char *) input + offset, attrLength);
+	free(nullIndicator);
+
 }
 
-int getTupleLength(const void *tuple, vector<Attribute> attrs) {
+int getTupleLength(const void *tuple, vector<Attribute> attrs, int attrPos) {
+
 	int result = 0;
+
+	int totalColSize = attrs.size();
+	int nullBytes = getActualBytesForNullsIndicator( totalColSize );
+	unsigned char* nullIndicator = (unsigned char*) malloc(nullBytes);
+	memcpy( nullIndicator, (char*)tuple, nullBytes );
+	// check is null or not
+	int shiftedBit = 8*nullBytes - attrPos - 1;
+	int nullIndex = nullBytes - (int)(shiftedBit/8) - 1;
+	bool isNull = nullIndicator[nullIndex] & (1 << (shiftedBit%8) );
+
+	unsigned offset = nullBytes;
+	//bool isDestCol = false;
 
 	for (unsigned i = 0; i < attrs.size(); i++) {
 		if (attrs[i].type == TypeInt)
@@ -976,7 +1167,10 @@ int getTupleLength(const void *tuple, vector<Attribute> attrs) {
 		}
 	}
 
+	result+=nullBytes;
+
 	return result;
+
 }
 
 bool compareField(const void *attribute, const void *condition, AttrType type,

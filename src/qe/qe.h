@@ -300,15 +300,23 @@ class INLJoin : public Iterator {
             IndexScan *_rightItr;
 
             void *_leftValue;
+
+            //void *_rightValue;  //
+
+            vector<JoinMapValue> _curLeftValues;
+
             void *_leftTuple;
             void *_rightTuple;
 
             CompOp _op;
             AttrType _type;
             unsigned _leftAttrPos;
-            vector<Attribute> _attrs;
-            vector<Attribute> _leftAttrs;
-            vector<Attribute> _rightAttrs;
+
+            //unsigned _rightAttrPos;  //
+
+            vector<Attribute> _attributes;
+            vector<Attribute> _leftAttributes;
+            vector<Attribute> _rightAttributes;
 
             RC _isEnd;
             bool _leftHalf; // for NE_OP;
@@ -316,6 +324,8 @@ class INLJoin : public Iterator {
             void setCondition(CompOp op, void **lowKey, void **highKey,
                 bool &lowKeyInclusive, bool &highKeyInclusive);
 
+            int getRecordSize(const void *data, const vector<Attribute> attrs);
+            void createJoinRecord(void *data, JoinMapValue leftValue, const void *rightData);
 
 };
 
@@ -368,7 +378,7 @@ int getColumnData(const void *data, void *columnData, const vector<Attribute> at
 // for INLJ
 void readField(const void *input, void *data, vector<Attribute> attrs,
         int attrPos, AttrType type);
-int getTupleLength(const void *tuple, vector<Attribute> attrs);
+int getTupleLength(const void *tuple, vector<Attribute> attrs, int AttrPos);
 bool compareField(const void *attribute, const void *condition, AttrType type,
         CompOp compOp);
 #endif
