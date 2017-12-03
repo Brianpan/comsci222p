@@ -31,13 +31,11 @@ int testCase_1() {
 	}
 
 	// Create an index after inserting tuples - should reflect the currently existing tuples.
-	cout<<"create Left C index"<<endl;
 	rc = createIndexforLeftC();
 	if (rc != success) {
 		cerr << "***** createIndexforLeftC() failed.  *****" << endl;
 		return rc;
 	}
-
 	return rc;
 }
 
@@ -52,7 +50,7 @@ int main() {
 		cerr << "***** [FAIL] QE Test Case 1 failed. *****" << endl;
 		return fail;
 	}
-
+	
 	// Create the left table
 	if (createLeftTable() != success) {
 		cerr << "***** createLeftTable() failed." << endl;
