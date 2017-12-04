@@ -497,6 +497,9 @@ RC RecordBasedFileManager::prepareRecord( const vector<Attribute> &recordDescrip
 	// the data of record size
 	unsigned int recordActualSize = 0;
 
+	// less insertion
+	RecordMinLen recordAddrPointerArr[recordSize];
+
 	for( int i = 0; i<recordSize;i++ )
 	{
 		AttrType columnType = recordDescriptor[i].type;
@@ -550,8 +553,11 @@ RC RecordBasedFileManager::prepareRecord( const vector<Attribute> &recordDescrip
 		}
 		// each time shift sizeof(RecordMinLen)
 		// set recordAddrPointer
-		memcpy( (char*)recordAddrPointer + i*sizeof(RecordMinLen), &recordOffset, sizeof(RecordMinLen) );
+		// memcpy( (char*)recordAddrPointer + i*sizeof(RecordMinLen), &recordOffset, sizeof(RecordMinLen) );
+		recordAddrPointerArr[i] = recordOffset;
 	}
+	memcpy((char*)recordAddrPointer, recordAddrPointerArr, recordSize*sizeof(RecordMinLen));
+
 	// memcpy data to recordData
 	memcpy( (char*) recordData, &recordAttrCount, sizeof(RecordMinLen) );
 	localOffset += sizeof(RecordMinLen);
