@@ -1472,7 +1472,71 @@ Aggregate::Aggregate(Iterator *input,          // Iterator of input R
 	_inputIterator = input;
 	_aggAttr = aggAttr;
 	_op = op;
-	aggAttr.position = 1;
+	// generate attributes
+	_inputIterator->getAttributes(_inputAttributes);
+
+	Attribute aggData;
+	aggData.position = 1;
+	aggData.length = 4;
+	switch(_op){
+		case MIN:
+			if(aggAttr.type == TypeInt)
+			{
+				aggData.type = TypeInt;
+			}
+			else
+			{
+				aggData.type = TypeReal;
+			}
+			aggData.name = "MIN("+aggAttr.name+")";
+			break;
+		case MAX:
+			if(aggAttr.type == TypeInt)
+			{
+				aggData.type = TypeInt;
+			}
+			else
+			{
+				aggData.type = TypeReal;
+			}
+			aggData.name = "MAX("+aggAttr.name+")";
+			break;
+		case COUNT:
+			aggData.type = TypeInt;
+			aggData.name = "COUNT("+aggAttr.name+")";
+			break;
+		case SUM:
+			if(aggAttr.type == TypeInt)
+			{
+				aggData.type = TypeInt;
+			}
+			else
+			{
+				aggData.type = TypeReal;
+			}
+			aggData.name = "SUM("+aggAttr.name+")";
+			break;
+		case AVG:
+			aggData.type = TypeReal;
+			aggData.name = "AVG("+aggAttr.name+")";
+			break;
+	}
+
+	_attributes.push_back(aggData);
+}
+
+Aggregate::Aggregate(Iterator *input,             // Iterator of input R
+                  Attribute aggAttr,           // The attribute over which we are computing an aggregate
+                  Attribute groupAttr,         // The attribute over which we are grouping the tuples
+                  AggregateOp op              // Aggregate operation
+        ){
+	_inputIterator = input;
+	_aggAttr = aggAttr;
+	_op = op;
+	_groupAttr = groupAttr;
+
+	_groupAttr.position = 1;
+	_attributes.push_back(_groupAttr);
 	// generate attributes
 	_inputIterator->getAttributes(_inputAttributes);
 
@@ -1524,16 +1588,35 @@ Aggregate::Aggregate(Iterator *input,          // Iterator of input R
 	}
 
 	_attributes.push_back(aggData);
+	_preCalculate = false;
 }
-
 Aggregate::~Aggregate(){
 	_inputIterator = NULL;
 }
 
 RC Aggregate::getNextTuple(void *data){
 	RC success = -1;
+	if(_attributes.size() == 1)
+	{
+		success = calculateAggregate(data);
+	}
+	else
+	{
+		if(!_preCalculate)
+		{
+			_preCalculate = true;
+			preCalculateRecord();
+		}
 
-	success = calculateAggregate(data);
+		if( _groupRecords.size() > 0 )
+		{
+			JoinMapValue v = _groupRecords.back();
+			_groupRecords.pop_back();
+			const char *recordData = v.data.c_str();
+			memcpy( data, recordData, v.size );
+			success = 0;
+		}
+	}
 	return success;
 }
 
@@ -1546,6 +1629,15 @@ RC Aggregate::calculateAggregate(void *data){
 
 	float aggrValue = 0;
 	float aggrCount = 0;
+	if(_op == MIN)
+	{
+		aggrValue = INT_MAX;
+	}
+	if(_op == MAX)
+	{
+		aggrValue =INT_MIN;
+	}
+
 	while( _inputIterator->getNextTuple(tmpData) != QE_EOF )
 	{
 		int columnSize = getColumnData(tmpData, columnData, _inputAttributes, attrPosition);
@@ -1554,64 +1646,36 @@ RC Aggregate::calculateAggregate(void *data){
 			case MIN:
 				if(_aggAttr.type == TypeInt)
 				{
-					if(success == -1)
+					int curValue = *((int*)columnData);
+					if( curValue < aggrValue )
 					{
-						aggrValue = *((int*)columnData);
-					}
-					else
-					{
-						int curValue = *((int*)columnData);
-						if( curValue < aggrValue )
-						{
-							aggrValue = curValue;
-						}
+						aggrValue = curValue;
 					}
 				}
 				else
 				{
-					if(success == -1)
+					float curValue = *((float*)columnData);
+					if( curValue < aggrValue )
 					{
-						aggrValue = *((float*)columnData);
-					}
-					else
-					{
-						float curValue = *((float*)columnData);
-						if( curValue < aggrValue )
-						{
-							aggrValue = curValue;
-						}
+						aggrValue = curValue;
 					}
 				}
 				break;
 			case MAX:
 				if(_aggAttr.type == TypeInt)
 				{
-					if(success == -1)
+					int curValue = *((int*)columnData);
+					if( curValue > aggrValue )
 					{
-						aggrValue = *((int*)columnData);
-					}
-					else
-					{
-						int curValue = *((int*)columnData);
-						if( curValue > aggrValue )
-						{
-							aggrValue = curValue;
-						}
+						aggrValue = curValue;
 					}
 				}
 				else
 				{
-					if(success == -1)
+					float curValue = *((float*)columnData);
+					if( curValue > aggrValue )
 					{
-						aggrValue = *((float*)columnData);
-					}
-					else
-					{
-						float curValue = *((float*)columnData);
-						if( curValue > aggrValue )
-						{
-							aggrValue = curValue;
-						}
+						aggrValue = curValue;
 					}
 				}
 				break;
@@ -1652,7 +1716,7 @@ RC Aggregate::calculateAggregate(void *data){
 		if(_op == AVG)
 		{
 			float aggrAvg = ((float)aggrValue)/aggrCount;
-				memcpy( (char*)data+1, &aggrAvg, 4);
+			memcpy( (char*)data+1, &aggrAvg, 4);
 		}
 		else if(_op == COUNT)
 		{
@@ -1669,6 +1733,202 @@ RC Aggregate::calculateAggregate(void *data){
 	return success;
 }
 
+RC Aggregate::preCalculateRecord(){
+	RC success = -1;
+
+	void *tmpData = malloc(PAGE_SIZE);
+	void *columnData = malloc(PAGE_SIZE);
+	int attrPosition = getAttributePosition(_inputAttributes, _aggAttr.name);
+
+	void *groupData = malloc(PAGE_SIZE);
+	int groupAttrPosition = getAttributePosition(_inputAttributes, _groupAttr.name);
+
+	unordered_map<string, AggregateValue> aggregateMap;
+	while( _inputIterator->getNextTuple(tmpData) != QE_EOF )
+	{
+		int columnSize = getColumnData(tmpData, columnData, _inputAttributes, attrPosition);
+		int groupColumnSize = getColumnData(tmpData, groupData, _inputAttributes, groupAttrPosition);
+
+		string key;
+		// prepare key
+		if(_groupAttr.type == TypeVarChar)
+		{
+			if( groupColumnSize < 0 )
+			{
+				key = "null";
+			}
+			else
+			{
+				memcpy( &columnSize, groupData, sizeof(int) );
+				key = string( (char*)groupData+4, columnSize );
+			}
+		}
+		else
+		{
+			if(_groupAttr.type == TypeInt)
+			{
+				key = to_string(*(int*)groupData);
+			}
+			else
+			{
+				key = to_string(*(float*)groupData);
+			}
+
+		}
+
+		// check this record in the map or not
+		auto it = aggregateMap.find(key);
+
+		if(it == aggregateMap.end())
+		{
+			AggregateValue aggrObject;
+			aggrObject.aggrValue = 0;
+			aggrObject.aggrCount = 0;
+			// set min val or max val
+			if(_op == MIN)
+			{
+				aggrObject.aggrValue = INT_MAX;
+			}
+			if(_op == MAX)
+			{
+				aggrObject.aggrValue = INT_MIN;
+			}
+			aggregateMap[key] = aggrObject;
+		}
+
+		// start aggregate
+		switch(_op){
+			case MIN:
+				if(_aggAttr.type == TypeInt)
+				{
+
+					int curValue = *((int*)columnData);
+					if( curValue < aggregateMap[key].aggrValue )
+					{
+						aggregateMap[key].aggrValue = curValue;
+					}
+
+				}
+				else
+				{
+					float curValue = *((float*)columnData);
+					if( curValue < aggregateMap[key].aggrValue )
+					{
+						aggregateMap[key].aggrValue = curValue;
+					}
+
+				}
+				break;
+			case MAX:
+				if(_aggAttr.type == TypeInt)
+				{
+					int curValue = *((int*)columnData);
+					if( curValue > aggregateMap[key].aggrValue )
+					{
+						aggregateMap[key].aggrValue = curValue;
+					}
+				}
+				else
+				{
+					float curValue = *((float*)columnData);
+					if( curValue > aggregateMap[key].aggrValue )
+					{
+						aggregateMap[key].aggrValue = curValue;
+					}
+				}
+				break;
+			case COUNT:
+				aggregateMap[key].aggrCount += 1;
+				break;
+			case SUM:
+				if(_aggAttr.type == TypeInt)
+				{
+					aggregateMap[key].aggrValue += *((int*)columnData);
+				}
+				else
+				{
+					aggregateMap[key].aggrValue += *((float*)columnData);
+				}
+				break;
+			case AVG:
+				if(_aggAttr.type == TypeInt)
+				{
+					aggregateMap[key].aggrValue += *((int*)columnData);
+				}
+				else
+				{
+					aggregateMap[key].aggrValue += *((float*)columnData);
+				}
+				aggregateMap[key].aggrCount += 1;
+				break;
+		}
+
+		success = 0;
+
+	}
+
+	// prepare data
+	if(success == 0)
+	{
+		for(auto it=aggregateMap.begin();it!=aggregateMap.end(); it++)
+		{
+			memset(tmpData, 0, PAGE_SIZE);
+			int offset = 1;
+			if(_groupAttr.type == TypeVarChar)
+			{
+				const char* attrg = it->first.c_str();
+				int stringSize = it->first.size();
+				memcpy((char*)tmpData+offset, &stringSize, sizeof(int));
+				offset += sizeof(int);
+				memcpy((char*)tmpData+offset, attrg, stringSize);
+				offset += stringSize;
+			}
+			else
+			{
+				if(_groupAttr.type == TypeInt)
+				{
+					int val = stoi(it->first);
+					memcpy((char*)tmpData+offset, &val, 4);
+				}
+				else
+				{
+					float val = stof(it->first);
+					memcpy((char*)tmpData+offset, &val, 4);
+				}
+
+				offset += 4;
+			}
+
+			if(_op == AVG)
+			{
+				float aggrAvg = ((float)it->second.aggrValue)/it->second.aggrCount;
+				memcpy( (char*)tmpData+offset, &aggrAvg, 4);
+			}
+			else if(_op == COUNT)
+			{
+				float aggr = it->second.aggrCount;
+				memcpy( (char*)tmpData+offset, &aggr, 4);
+			}
+			else
+			{
+				float aggr = it->second.aggrValue;
+				memcpy( (char*)tmpData+offset, &aggr, 4);
+			}
+			offset += 4;
+
+			JoinMapValue outputVal;
+			outputVal.size = offset;
+			outputVal.data = string((char*)tmpData, offset);
+			_groupRecords.push_back(outputVal);
+		}
+	}
+
+	free(tmpData);
+	free(columnData);
+	free(groupData);
+
+	return success;
+}
 void Aggregate::getAttributes(vector<Attribute> &attrs) const{
 	attrs = _attributes;
 }

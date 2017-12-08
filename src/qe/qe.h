@@ -29,6 +29,11 @@ struct JoinMapValue{
     int        size;
 };
 
+struct AggregateValue{
+    float aggrValue;
+    float aggrCount;
+};
+
 struct Condition {
     string  lhsAttr;        // left-hand side attribute
     CompOp  op;             // comparison operator
@@ -375,7 +380,7 @@ class Aggregate : public Iterator {
                   Attribute aggAttr,           // The attribute over which we are computing an aggregate
                   Attribute groupAttr,         // The attribute over which we are grouping the tuples
                   AggregateOp op              // Aggregate operation
-        ){};
+        );
         ~Aggregate();
 
         RC getNextTuple(void *data);
@@ -390,8 +395,12 @@ class Aggregate : public Iterator {
         Attribute _aggAttr;
         vector<Attribute> _attributes;
         vector<Attribute> _inputAttributes;
+        Attribute _groupAttr;
+        bool _preCalculate;
+        vector<JoinMapValue> _groupRecords;
 
         RC calculateAggregate(void *data);
+        RC preCalculateRecord();
 };
 
 // accessory functions
