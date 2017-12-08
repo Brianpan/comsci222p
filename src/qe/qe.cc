@@ -970,9 +970,25 @@ GHJoin::GHJoin(Iterator *leftIn,               // Iterator of input R
 		}
 		// partition hashing
 		int hashInt = 0;
-		for(int i=0;i<key.length();i++)
+		if(_leftAttributes[_leftPosition].type == TypeVarChar)
 		{
-			hashInt = hashInt << 1 ^ key[i];
+			for(int i=0;i<key.size();i++)
+			{
+				hashInt = hashInt << 1 ^ key[i];
+			}
+		}
+		else
+		{
+			if(_leftAttributes[_leftPosition].type == TypeReal)
+			{
+				float f;
+				memcpy(&f, columnData, 4);
+				hashInt = f;
+			}
+			else
+			{
+				memcpy(&hashInt, columnData, 4);
+			}
 		}
 
 		int partitionId = hashInt % _numPartitions;
@@ -990,7 +1006,7 @@ GHJoin::GHJoin(Iterator *leftIn,               // Iterator of input R
 	while( _rightIn->getNextTuple(data) != QE_EOF)
 	{
 		memset(columnData, 0, PAGE_SIZE);
-		int columnSize = getColumnData(data, columnData, _leftAttributes, _leftPosition);
+		int columnSize = getColumnData(data, columnData, _rightAttributes, _rightPosition);
 		// column data should add column size back
 		string key;
 		if(columnSize < 0)
@@ -1008,9 +1024,25 @@ GHJoin::GHJoin(Iterator *leftIn,               // Iterator of input R
 		}
 
 		int hashInt = 0;
-		for(int i=0;i<key.length();i++)
+		if(_rightAttributes[_rightPosition].type == TypeVarChar)
 		{
-			hashInt = hashInt << 1 ^ key[i];
+			for(int i=0;i<key.size();i++)
+			{
+				hashInt = hashInt << 1 ^ key[i];
+			}
+		}
+		else
+		{
+			if(_rightAttributes[_rightPosition].type == TypeReal)
+			{
+				float f;
+				memcpy(&f, columnData, 4);
+				hashInt = f;
+			}
+			else
+			{
+				memcpy(&hashInt, columnData, 4);
+			}
 		}
 
 		int partitionId = hashInt % _numPartitions;
@@ -1080,8 +1112,11 @@ RC GHJoin::getNextTuple(void *data){
 				rightAttrNames.push_back(_rightAttributes[i].name);
 			}
 
+			RM_ScanIterator rmScanIterator;
+			_rightRmIterator = rmScanIterator;
 			rm->scan(rightPartitionTable, "", NO_OP, NULL, rightAttrNames, _rightRmIterator);
 			_shouldLoadPartition = false;
+			_shouldGetNextRight = true;
 		}
 
 		if(_shouldGetNextRight)
@@ -1189,7 +1224,7 @@ RC GHJoin::getNextTuple(void *data){
 
 		// update flag
 		_shouldLoadPartition = true;
-		// _rightRmIterator.close();
+		_rightRmIterator.close();
 	}
 
 	free(rightData);
