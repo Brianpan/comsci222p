@@ -897,6 +897,537 @@ void INLJoin::getAttributes(vector<Attribute> &attrs) const {
 	attrs = _attributes;
 }
 
+// GH Join
+GHJoin::GHJoin(Iterator *leftIn,               // Iterator of input R
+            Iterator *rightIn,               // Iterator of input S
+            const Condition &condition,      // Join condition (CompOp is always EQ)
+            const unsigned numPartitions     // # of partitions for each relation (decided by the optimizer)
+      ){
+	leftIn->getAttributes(_leftAttributes);
+	rightIn->getAttributes(_rightAttributes);
+
+	_leftIn = leftIn;
+	_rightIn = rightIn;
+
+	_condition = condition;
+	_leftPosition = getAttributePosition( _leftAttributes, condition.lhsAttr );
+	_rightPosition = getAttributePosition( _rightAttributes, condition.rhsAttr );
+
+	_attributes = _leftAttributes;
+	_attributes.insert( _attributes.end(), _rightAttributes.begin(), _rightAttributes.end() );
+	_leftNullBytes = getActualBytesForNullsIndicator(_leftAttributes.size());
+	_rightNullBytes = getActualBytesForNullsIndicator( _rightAttributes.size() );
+
+	// params for partition
+	_shouldLoadPartition = true;
+	_curPartitionIdx = -1;
+	_shouldGetNextRight = true;
+	_numPartitions = numPartitions;
+
+	// do partition
+	void *data = malloc(PAGE_SIZE);
+	void *columnData = malloc(PAGE_SIZE);
+
+	// open file create table
+	string partitionName;
+	RelationManager *rm = RelationManager::instance();
+
+	// left partition
+	for(int idx=0;idx<_numPartitions;idx++)
+	{
+		partitionName = getPartitionName(condition.lhsAttr, idx);
+		_partitionMapNames.push_back(partitionName);
+		rm->createTable(partitionName, _leftAttributes);
+
+	}
+	// right partition
+	for(int idx=0;idx<_numPartitions;idx++)
+	{
+		partitionName = getPartitionName(condition.rhsAttr, idx);
+		_rightPartitionMapNames.push_back(partitionName);
+		rm->createTable(partitionName, _rightAttributes);
+	}
+
+	// insert to left partition
+	while( _leftIn->getNextTuple(data) != QE_EOF)
+	{
+		memset(columnData, 0, PAGE_SIZE);
+		int columnSize = getColumnData(data, columnData, _leftAttributes, _leftPosition);
+		// column data should add column size back
+		string key;
+		if(columnSize < 0)
+		{
+			key = "null";
+		}
+		if(columnSize > 0 && _leftAttributes[_leftPosition].type == TypeVarChar)
+		{
+			memcpy( &columnSize, columnData, sizeof(int) );
+			key = string( (char*)columnData+4, columnSize );
+		}
+		else
+		{
+			key = string( columnSize, 4 );
+		}
+		// partition hashing
+		int hashInt = 0;
+		for(int i=0;i<key.length();i++)
+		{
+			hashInt = hashInt << 1 ^ key[i];
+		}
+
+		int partitionId = hashInt % _numPartitions;
+		string partitionTable = getPartitionName(condition.lhsAttr, partitionId);
+		RID rid;
+		if( rm->insertTuple(partitionTable, data, rid) != 0)
+		{
+			cout<<"Something Wrong"<<endl;
+		}
+
+		memset(data, 0, PAGE_SIZE);
+	}
+
+	// insert to right partition
+	while( _rightIn->getNextTuple(data) != QE_EOF)
+	{
+		memset(columnData, 0, PAGE_SIZE);
+		int columnSize = getColumnData(data, columnData, _leftAttributes, _leftPosition);
+		// column data should add column size back
+		string key;
+		if(columnSize < 0)
+		{
+			key = "null";
+		}
+		if(columnSize > 0 && _rightAttributes[_rightPosition].type == TypeVarChar)
+		{
+			memcpy( &columnSize, columnData, sizeof(int) );
+			key = string( (char*)columnData+4, columnSize );
+		}
+		else
+		{
+			key = string( columnSize, 4 );
+		}
+
+		int hashInt = 0;
+		for(int i=0;i<key.length();i++)
+		{
+			hashInt = hashInt << 1 ^ key[i];
+		}
+
+		int partitionId = hashInt % _numPartitions;
+		string partitionTable = getPartitionName(condition.rhsAttr, partitionId);
+		RID rid;
+		if( rm->insertTuple(partitionTable, data, rid) != 0)
+		{
+			cout<<"Something Wrong"<<endl;
+		}
+
+		memset(data, 0, PAGE_SIZE);
+	}
+
+	free(data);
+	free(columnData);
+}
+
+GHJoin::~GHJoin(){
+	_leftIn = NULL;
+	_rightIn = NULL;
+	string partitionName;
+	RelationManager *rm = RelationManager::instance();
+
+	// delete partition tables
+	for(int i=0;i<_partitionMapNames.size();i++)
+	{
+		partitionName = _partitionMapNames[i];
+		rm->deleteTable(partitionName);
+	}
+
+	for(int i=0;i<_rightPartitionMapNames.size();i++)
+	{
+		partitionName = _rightPartitionMapNames[i];
+		rm->deleteTable(partitionName);
+	}
+}
+
+
+RC GHJoin::getNextTuple(void *data){
+	RC success = -1;
+
+	RelationManager *rm = RelationManager::instance();
+	void *rightData = malloc(PAGE_SIZE);
+	void *rightColumnData = malloc(PAGE_SIZE);
+	int attrPosition = getAttributePosition(_rightAttributes, _condition.rhsAttr);
+	Attribute attr = _rightAttributes[attrPosition];
+
+	while(true)
+	{
+		if(_shouldLoadPartition)
+		{
+			_curPartitionIdx += 1;
+			// no partition left
+			if(_curPartitionIdx >= _numPartitions)
+			{
+				break;
+			}
+			// load all partition into hash
+			loadLeftMap();
+
+			// reset rmScanIterator
+			string rightPartitionTable = getPartitionName(_condition.rhsAttr, _curPartitionIdx);
+
+			vector<string> rightAttrNames;
+			for(int i=0;i<_rightAttributes.size();i++)
+			{
+				rightAttrNames.push_back(_rightAttributes[i].name);
+			}
+
+			rm->scan(rightPartitionTable, "", NO_OP, NULL, rightAttrNames, _rightRmIterator);
+			_shouldLoadPartition = false;
+		}
+
+		if(_shouldGetNextRight)
+		{
+			RID rid;
+			while( _rightRmIterator.getNextTuple(rid, rightData) != RM_EOF )
+			{
+				int columnSize = getColumnData(rightData, rightColumnData, _rightAttributes, attrPosition);
+				if( columnSize <= -1 )
+				{
+					string nullKey = NULL_KEY;
+					auto it = _leftMap.find(nullKey);
+					if( it != _leftMap.end() )
+					{
+						int leftValueSize = _leftMap[nullKey].size();
+						if(leftValueSize > 0)
+						{
+							_curLeftValues = _leftMap[nullKey];
+							JoinMapValue leftR = _curLeftValues.back();
+							_curLeftValues.pop_back();
+							createJoinRecord( data, leftR, rightData );
+
+							success = 0;
+							free(rightData);
+							free(rightColumnData);
+
+							if(leftValueSize == 1)
+							{
+								_shouldGetNextRight = true;
+							}
+
+							return success;
+						}
+					}
+				}
+				// non NULL case
+				else
+				{
+					// prepare rightKey
+					string rightKey;
+					if(attr.type == TypeVarChar)
+					{
+						int charLen;
+						memcpy( &charLen, rightColumnData, sizeof(int) );
+						rightKey = string( ( (char*)rightColumnData+4 ), charLen );
+					}
+					else
+					{
+						if(attr.type == TypeInt)
+						{
+							int rightVal;
+							memcpy( &rightVal, rightColumnData, sizeof(int) );
+							rightKey = to_string(rightVal);
+						}
+						else
+						{
+							float rightVal;
+							memcpy( &rightVal, rightColumnData, sizeof(float) );
+							rightKey = to_string(rightVal);
+						}
+					}
+					// start get hashmap vector
+					auto it = _leftMap.find(rightKey);
+					if( it != _leftMap.end() )
+					{
+						int leftValueSize = _leftMap[rightKey].size();
+						if(leftValueSize > 0)
+						{
+							_curLeftValues = _leftMap[rightKey];
+							JoinMapValue leftR = _curLeftValues.back();
+							_curLeftValues.pop_back();
+							createJoinRecord( data, leftR, rightData );
+
+							success = 0;
+							free(rightData);
+							free(rightColumnData);
+
+							if(leftValueSize == 1)
+							{
+								_shouldGetNextRight = true;
+							}
+
+							return success;
+						}
+					}
+				}
+			}
+		}
+		else
+		{
+			JoinMapValue leftR = _curLeftValues.back();
+			_curLeftValues.pop_back();
+			createJoinRecord( data, leftR, rightData );
+			if(_curLeftValues.size() == 0)
+			{
+				_shouldGetNextRight = true;
+			}
+
+			success = 0;
+			free(rightData);
+			free(rightColumnData);
+
+			return success;
+		}
+
+		// update flag
+		_shouldLoadPartition = true;
+		// _rightRmIterator.close();
+	}
+
+	free(rightData);
+	free(rightColumnData);
+	return success;
+}
+
+// load all records from partition
+RC GHJoin::loadLeftMap(){
+	RC success = 0;
+
+	// init _leftMap
+	_leftMap.clear();
+
+	void *data = malloc(PAGE_SIZE);
+	int recordSize;
+	JoinMapValue mapValue;
+
+	int attrPosition = getAttributePosition(_leftAttributes, _condition.lhsAttr);
+	Attribute attr = _leftAttributes[attrPosition];
+	int nullBytes = getActualBytesForNullsIndicator(_leftAttributes.size());
+
+	void *columnData = malloc(PAGE_SIZE);
+	// get iteration partition file
+	string partitionTable = getPartitionName(_condition.lhsAttr, _curPartitionIdx);
+	RelationManager *rm = RelationManager::instance();
+	vector<string> leftAttrNames;
+	for(int i=0;i<_leftAttributes.size();i++)
+	{
+		leftAttrNames.push_back(_leftAttributes[i].name);
+	}
+	RM_ScanIterator rmIterator;
+
+	rm->scan( partitionTable, "", NO_OP, NULL, leftAttrNames, rmIterator);
+	RID rid;
+
+	while( rmIterator.getNextTuple(rid,data) != RM_EOF )
+	{
+		recordSize = getRecordSize(data, _leftAttributes);
+		mapValue.size = recordSize;
+		mapValue.data = string( (char*)data, recordSize+nullBytes );
+
+		int joinColumnSize = getColumnData(data, columnData, _leftAttributes, attrPosition);
+
+		// null case using special key NULL_KEY
+		if(joinColumnSize == -1)
+		{
+			string nullKey = NULL_KEY;
+			auto it = _leftMap.find(nullKey);
+			if( it != _leftMap.end() )
+			{
+				_leftMap[nullKey].push_back(mapValue);
+			}
+			else
+			{
+				vector<JoinMapValue> jmap;
+				jmap.push_back(mapValue);
+				_leftMap[nullKey] = jmap;
+			}
+
+			continue;
+		}
+
+		// Non-Null key
+		string mapKey;
+		if(attr.type == TypeVarChar)
+		{
+			int charLen;
+			memcpy( &charLen, (char*)columnData, sizeof(int) );
+			mapKey = string( ((char*)columnData+sizeof(int)), charLen );
+		}
+		else
+		{
+			if(attr.type == TypeInt)
+			{
+				int joinKeyVal;
+				memcpy( &joinKeyVal, columnData, sizeof(int) );
+				mapKey = to_string(joinKeyVal);
+			}
+			else
+			{
+				float joinKeyVal;
+				memcpy( &joinKeyVal, columnData, sizeof(float) );
+				mapKey = to_string(joinKeyVal);
+			}
+		}
+
+		auto it = _leftMap.find(mapKey);
+		if(it != _leftMap.end())
+		{
+			_leftMap[mapKey].push_back(mapValue);
+		}
+		else
+		{
+			vector<JoinMapValue> jmap;
+			jmap.push_back(mapValue);
+			_leftMap[mapKey] = jmap;
+		}
+	}
+
+	// free & close
+	rmIterator.close();
+	free(data);
+	free(columnData);
+	return success;
+}
+
+
+string GHJoin::getPartitionName(string attrName, int idx){
+	string sIdx = to_string(idx);
+	return (_partitionPrefix + attrName + sIdx);
+}
+
+void GHJoin::getAttributes(vector<Attribute> &attrs) const{
+	attrs = _attributes;
+}
+
+void GHJoin::createJoinRecord(void *data, JoinMapValue leftValue, const void *rightData){
+	// prepare left data
+	const char *leftData  = leftValue.data.c_str();
+
+	int leftAttributeSize = _leftAttributes.size();
+	int rightAttributeSize = _rightAttributes.size();
+	int leftNullBytes = getActualBytesForNullsIndicator( leftAttributeSize );
+	int rightNullBytes = getActualBytesForNullsIndicator( rightAttributeSize );
+
+	int combinedSize = leftAttributeSize + rightAttributeSize;
+	int nullBytes = getActualBytesForNullsIndicator(combinedSize);
+
+	// init null bytes
+	unsigned char *leftNullIndicator = (unsigned char*) malloc(leftNullBytes);
+	unsigned char *rightNullIndicator = (unsigned char*) malloc(rightNullBytes);
+	unsigned char *nullIndicator = (unsigned char*) malloc(nullBytes);
+	int base10NullBytes[nullBytes];
+	memset( base10NullBytes, 0, sizeof(int)*nullBytes );
+
+	memcpy( leftNullIndicator, leftData, leftNullBytes );
+	memcpy( rightNullIndicator, rightData, rightNullBytes );
+
+	int joinIdx = 0;
+	for(int i=0;i<_leftAttributes.size();i++)
+	{
+		// check null
+		int shiftedBit = 8*leftNullBytes - i - 1;
+		int nullIndex = leftNullBytes - (int)(shiftedBit/8) - 1;
+		bool isNull = leftNullIndicator[nullIndex] & ( 1<<(shiftedBit%8) );
+
+		if(isNull)
+		{
+			int mod = joinIdx/8;
+			int joinShiftBit = 8*nullBytes- joinIdx - 1;
+			base10NullBytes[mod] += pow( 2, (joinShiftBit%8) );
+			continue;
+		}
+
+		joinIdx += 1;
+	}
+
+	for(int i=0;i<_rightAttributes.size();i++)
+	{
+		// check null
+		int shiftedBit = 8*rightNullBytes - i - 1;
+		int nullIndex = rightNullBytes - (int)(shiftedBit/8) - 1;
+		bool isNull = rightNullIndicator[nullIndex] & ( 1<<(shiftedBit%8) );
+
+		if(isNull)
+		{
+			int mod = joinIdx/8;
+			int joinShiftBit = 8*nullBytes- joinIdx - 1;
+			base10NullBytes[mod] += pow( 2, (joinShiftBit%8) );
+			continue;
+		}
+
+		joinIdx += 1;
+	}
+	// from int to char 8 bits
+	for(int i=0;i<nullBytes;i++)
+	{
+		nullIndicator[i] = base10NullBytes[i];
+	}
+
+	// copy null Indicator
+	memcpy( data, nullIndicator, nullBytes );
+
+	// start copy data
+	int offset = nullBytes;
+	// be careful the left data should offset leftNullBytes
+	// copy left
+	memcpy( (char*)data+offset, (char*)leftData+leftNullBytes, leftValue.size );
+	offset += leftValue.size;
+	// copy right
+	int rightRecordSize = getRecordSize(rightData, _rightAttributes);
+	memcpy( (char*)data+offset, (char*)rightData+rightNullBytes, rightRecordSize );
+}
+
+int GHJoin::getRecordSize(const void *data, const vector<Attribute> attrs){
+	int totalColSize = attrs.size();
+	int nullBytes = getActualBytesForNullsIndicator( totalColSize );
+	unsigned char* nullIndicator = (unsigned char*) malloc(nullBytes);
+	memcpy( nullIndicator, (char*)data, nullBytes );
+	int recordSize = 0;
+
+	int offset = nullBytes;
+
+	Attribute tmpAttr;
+	for(int attrPosition=0; attrPosition<attrs.size();attrPosition++)
+	{
+		tmpAttr = attrs[attrPosition];
+
+		// check is null or not
+		int shiftedBit = 8*nullBytes - attrPosition - 1;
+		int nullIndex = nullBytes - (int)(shiftedBit/8) - 1;
+		bool isNull = nullIndicator[nullIndex] & (1 << (shiftedBit%8) );
+
+		if(isNull)
+		{
+			continue;
+		}
+
+		if( tmpAttr.type == TypeVarChar )
+		{
+			int charLen;
+			memcpy( &charLen, (char*)data+offset, sizeof(int) );
+			int charTotalSize = sizeof(int) + charLen;
+			offset += charTotalSize;
+		}
+		else
+		{
+			offset += 4;
+		}
+	}
+
+	recordSize = offset - nullBytes;
+
+	free(nullIndicator);
+
+	return recordSize;
+}
 // Aggregate
 Aggregate::Aggregate(Iterator *input,          // Iterator of input R
                   Attribute aggAttr,        // The attribute over which we are computing an aggregate

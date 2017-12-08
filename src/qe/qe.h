@@ -318,12 +318,45 @@ class GHJoin : public Iterator {
             Iterator *rightIn,               // Iterator of input S
             const Condition &condition,      // Join condition (CompOp is always EQ)
             const unsigned numPartitions     // # of partitions for each relation (decided by the optimizer)
-      ){};
-      ~GHJoin(){};
+      );
+      ~GHJoin();
 
-      RC getNextTuple(void *data){return QE_EOF;};
+      RC getNextTuple(void *data);
       // For attribute in vector<Attribute>, name it as rel.attr
-      void getAttributes(vector<Attribute> &attrs) const{};
+      void getAttributes(vector<Attribute> &attrs) const;
+    private:
+        Iterator *_leftIn;
+        Iterator *_rightIn;
+
+        Condition _condition;
+
+        int _leftPosition;
+        int _rightPosition;
+
+        int _leftNullBytes;
+        int _rightNullBytes;
+
+        vector<Attribute> _attributes;
+        vector<Attribute> _leftAttributes;
+        vector<Attribute> _rightAttributes;
+
+        string _partitionPrefix = "partition_";
+        unsigned _numPartitions;
+        int _curPartitionIdx;
+        bool _shouldLoadPartition;
+        bool _shouldGetNextRight;
+        vector<JoinMapValue> _curLeftValues;
+
+        RM_ScanIterator _rightRmIterator;
+
+        vector<string> _partitionMapNames;
+        vector<string> _rightPartitionMapNames;
+        unordered_map<string, vector<JoinMapValue>> _leftMap;
+
+        RC loadLeftMap();
+        string getPartitionName(string attrName, int idx);
+        int getRecordSize(const void *data, const vector<Attribute> attrs);
+        void createJoinRecord(void *data, JoinMapValue leftValue, const void *rightData);
 };
 
 class Aggregate : public Iterator {
